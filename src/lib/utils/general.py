@@ -5,6 +5,7 @@ import functools
 import logging
 logger = logging.getLogger(__name__)
 
+
 def time_func(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -14,6 +15,7 @@ def time_func(func):
         return ret
 
     return wrapper
+
 
 def merge_dicts(sink, source):
     if not isinstance(sink, dict) or not isinstance(source, dict):
@@ -26,6 +28,7 @@ def merge_dicts(sink, source):
             sink[k] = v
 
     return sink
+
 
 def get_config(config_files):
     """Reading config files from the cli args input which comes in list,
