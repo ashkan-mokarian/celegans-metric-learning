@@ -9,7 +9,7 @@ overwrite = true
 
 [path]
 project = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed'
-cupm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/pairwise_matching_dataset.pkl'
+cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/cpm_dataset.pkl'
 worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset'
 universe_labels = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg/universe.txt'
 worm_names = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg/worm_names.txt'

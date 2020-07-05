@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import datetime
+import getpass
+
 import toml
 import functools
 import logging
@@ -43,3 +45,17 @@ def get_config(config_files):
 
 
     return config
+
+
+def generate_run_id():
+
+    username = getpass.getuser()
+
+    now = datetime.datetime.now()
+    date = map(str, [now.year, now.month, now.day])
+    coarse_time = map(str, [now.hour, now.minute])
+    fine_time = map(str, [now.second, now.microsecond])
+
+    run_id = '-'.join(['_'.join(date), '_'.join(coarse_time),
+                       username])
+    return run_id

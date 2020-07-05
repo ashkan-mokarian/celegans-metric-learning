@@ -1,3 +1,6 @@
+# TODO: Wrong implementation, no need to consider only universe valid matches, but instead all. must find a way to
+#  check if matching solution labels correspond to volumes/labels numbering, otherwise make them
+
 """Functionalities regarding the combinatorial pairwise matching solutions"""
 import logging
 import os
@@ -32,7 +35,31 @@ def read_nuclei_names(file):
     return nuclei_names
 
 
+def read_seghyp_names(file):
+    """Reads seghyp names from .ano.curated.aligned.txt file. does not belong in comb_pm but anyways."""
+    seghyp_names = []
+    with open(file) as f:
+        for line in f:
+            parts = line.split(' ')
+            seghyp_name = parts[1].strip().upper()
+            seghyp_names.append(seghyp_name)
+    return  seghyp_names
+
+
+def relabel_pm(pm_sol, nuclei_names1, nuclei_names2, reference_names1, reference_names2):
+    rpm = dict()
+    for id1, id2 in pm_sol.items():
+        name1 = nuclei_names1[id1]
+        name2 = nuclei_names2[id2]
+        if name1 in reference_names1 and name2 in reference_names2:
+            rid1 = reference_names1.index(name1)
+            rid2 = reference_names2.index(name2)
+            rpm.update({rid1: rid2})
+    return rpm
+
+
 def get_pm_ulabels(pm_sol, nuclei_names1, nuclei_names2, ulabels):
+    """This is not used, made a mistake, since I don't need unique relabeling of pm sols for """
     if not type(pm_sol) is dict:
         if not os.path.exists(pm_sol):
             logger.error('pm_sol parameter has to be a pm solution(dict) or the path to a solution file(file_path)')
