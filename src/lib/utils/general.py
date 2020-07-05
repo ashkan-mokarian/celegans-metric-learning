@@ -38,6 +38,8 @@ def get_config(config_files):
     config = {}
     if config_files is not None:
         try:
+            if not isinstance(config_files, list):
+                config_files = [config_files]
             for conf in config_files:
                 config = merge_dicts(config, toml.load(conf))
         except:
