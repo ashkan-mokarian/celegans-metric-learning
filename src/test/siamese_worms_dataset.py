@@ -9,6 +9,7 @@ if __name__ == '__main__':
     config_file = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/experiments_cfg/default.toml'
     conf = get_config([config_file])
 
+    # train mode
     dataset = SiameseWormsDataset(conf['path']['worms_dataset'],
                                   conf['path']['cpm_dataset'],
                                   patch_size=(100,100,100))

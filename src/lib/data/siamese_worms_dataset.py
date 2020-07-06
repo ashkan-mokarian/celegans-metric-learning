@@ -66,8 +66,6 @@ class SiameseWormsDataset(IterableDataset):
             relabel_id = 0
             for l1, l2 in cpm_12.items():
                 relabel_id += 1  # labels should start from 1, 0 reserved for background
-                c = np.where(label1_orig==l1)
-                b= label1_orig==l1
                 label1[label1_orig==l1] = relabel_id
                 label2[label2_orig==l2] = relabel_id
 
