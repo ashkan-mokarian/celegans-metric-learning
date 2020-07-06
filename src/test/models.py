@@ -3,8 +3,8 @@ from torchsummary import summary
 
 import _init_paths
 
-from lib.models.unet import UNet
-from lib.models.convnet_models import SiameseNet
+from lib.modules.unet import UNet
+from lib.modules.convnet_models import SiameseNet
 
 if __name__ == '__main__':
     # torch.cuda.empty_cache()

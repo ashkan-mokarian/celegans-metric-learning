@@ -63,11 +63,29 @@ class SiameseWormsDataset(IterableDataset):
             # relabel label1 and 2, dont leave empty labels, make sure they match according to cpm
             label1 = np.zeros_like(label1_orig)
             label2 = np.zeros_like(label2_orig)
+            # Apparently instance segmentation datasets use a different axis for marking different instances.
+            # This is also the way it is used in lib/losses/discriminative.py
+            # Therefore, instead of having an instance number for every pixel, the corresponding pixels go into their
+            # corresponding n_instance axis, new shape is (n_instances,x,y,z)
+
+            # Since I have to concatenate n_instances to create the 2 batch, take the max n_instances of the two labels
+            nl1 = np.sum([1 if x in label1_orig else 0 for x in cpm_12.keys()])
+            nl2 = np.sum([1 if x in label2_orig else 0 for x in cpm_12.values()])
+            nl = max(nl1, nl2)
+            label1 = np.zeros((nl,) + label1_orig.shape)
+            label2 = np.zeros((nl,) + label2_orig.shape)
+
             relabel_id = 0
             for l1, l2 in cpm_12.items():
-                relabel_id += 1  # labels should start from 1, 0 reserved for background
-                label1[label1_orig==l1] = relabel_id
-                label2[label2_orig==l2] = relabel_id
+                increase = False
+                if l1 in label1_orig:
+                    label1[relabel_id, label1_orig == l1] = 1
+                    increase = True
+                if l2 in label2_orig:
+                    label2[relabel_id, label2_orig == l2] = 1
+                    increase = True
+                if increase:
+                    relabel_id += 1
 
             # cast them to tensor objects
             sample = {'raw1': raw1,

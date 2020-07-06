@@ -1,5 +1,5 @@
 # TODO: reimplement or find for pytorch https://github.com/Kainmueller-Lab/funlib.learn.tensorflow/blob/dev_peter/funlib/learn
-#  /tensorflow/models/unet.py
+#  /tensorflow/modules/unet.py
 # Adapted from https://discuss.pytorch.org/t/unet-implementation/426
 
 import torch
