@@ -45,7 +45,6 @@ def get_config(config_files):
         except:
             raise IOError('Could not read config file: {}'.format(conf))
 
-
     return config
 
 

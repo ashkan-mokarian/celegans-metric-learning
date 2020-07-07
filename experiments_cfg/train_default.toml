@@ -1,0 +1,15 @@
+name = 'default'
+
+[general]
+# error   40
+# warning 30
+# info    20
+# debug   10
+logging = 10
+debug = true
+#overwrite = true
+
+[path]
+#base = NONE
+#cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/cpm_dataset.pkl'
+#worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset'
