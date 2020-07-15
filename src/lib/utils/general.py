@@ -55,8 +55,6 @@ def generate_run_id():
     now = datetime.datetime.now()
     date = map(str, [now.year, now.month, now.day])
     coarse_time = map(str, [now.hour, now.minute])
-    fine_time = map(str, [now.second, now.microsecond])
 
-    run_id = '-'.join(['_'.join(date), '_'.join(coarse_time),
-                       username])
+    run_id = '_'.join(['_'.join(date), '_'.join(coarse_time)])
     return run_id

@@ -78,21 +78,6 @@ class ConvNetL2(ConvNet):
 #         return self.nonlinear(self.embedding_net(x))
 
 
-class SiameseNet(nn.Module):
-    """Wrapper for an embedding network, Processes 2 inputs"""
-    def __init__(self, embedding_net):
-        super(SiameseNet, self).__init__()
-        self.embedding_net = embedding_net
-
-    def forward(self, x1, x2):
-        output1 = self.embedding_net(x1)
-        output2 = self.embedding_net(x2)
-        return output1, output2
-
-    def get_embedding(self, x):
-        return self.embedding_net(x)
-
-
 class TripletNet(nn.Module):
     """Wrapper for an embedding network, processes 3 inputs"""
     def __init__(self, embedding_net):
