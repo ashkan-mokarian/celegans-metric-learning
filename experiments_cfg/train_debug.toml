@@ -1,2 +1,6 @@
 [train]
-n_step = 20
+n_step = 30
+model_ckpt_every_n_step = 10
+running_loss_interval = 5
+burn_in_step = 15
+lr_drop_patience = 2

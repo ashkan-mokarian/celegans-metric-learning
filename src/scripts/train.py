@@ -27,6 +27,10 @@ def get_settings():
                         help='name of training session, used for some namings')
     parser.add_argument('--debug', action='store_true',
                         help='loads train_debug.toml for debug train mode')
+    parser.add_argument('--load_last', action='store_true',
+                        help='loads last saved model by searching in the experiments saved models')
+    parser.add_argument('--load_best', action='store_true',
+                        help='loads best saved model by searching in the experiments saved models')
     args = parser.parse_args()
 
     # overwrite .toml settings with CLI settings
@@ -35,6 +39,13 @@ def get_settings():
         ts.NAME = args.name
     if args.debug or ts.GENERAL.DEBUG:
         ts.read_confs('train_debug')
+    if args.load_last:
+        ts.MODEL.INIT_MODEL_LAST = True
+    if args.load_best:
+        ts.MODEL.INIT_MODEL_BEST = True
+
+    assert sum(bool(x) for x in [ts.MODEL.INIT_MODEL_LAST, ts.MODEL.INIT_MODEL_BEST, ts.MODEL.INIT_MODEL_PATH]) <= 1, \
+        'Cannot set path/best/last model saving together'
     return ts
 
 
@@ -44,12 +55,16 @@ def main():
     # experiment root
     experiment_root = os.path.join(ts.PATH.EXPERIMENTS, ts.NAME)
     load_model_path = None
+
+    ckpts_root = os.path.join(experiment_root, 'ckpts')
     if ts.MODEL.INIT_MODEL_BEST:
-        raise NotImplementedError
+        ckpts = [os.path.join(ckpts_root, f) for f in os.listdir(ckpts_root) if f.startswith('bestmodel') and
+                 f.endswith('.pth')]
+        assert ckpts, f'Best model loading assigned, but no best models exist in [{ckpts_root}]'
+        load_model_path = ckpts[0]
     elif ts.MODEL.INIT_MODEL_PATH:
         raise NotImplementedError
     elif ts.MODEL.INIT_MODEL_LAST:
-        ckpts_root = os.path.join(experiment_root, 'ckpts')
         ckpts = [os.path.join(ckpts_root, f) for f in os.listdir(ckpts_root) if f.endswith('.pth')]
         load_model_path = max(ckpts, key=lambda x: int(x.split('-')[-1].split('.')[0]))
         assert os.path.isfile(load_model_path)
@@ -70,8 +85,6 @@ def main():
             ]
         )
 
-
-
     # Load seeds
     random.seed(ts.GENERAL.SEED)
     np.random.seed(ts.GENERAL.SEED)
@@ -87,7 +100,7 @@ def main():
     model = SiamesePixelwiseModel(ts.MODEL.MODEL_NAME,
                                   ts.MODEL.MODEL_PARAMS,
                                   load_model_path=load_model_path)
-    mock_input = iter(train_loader).__next__()
+    mock_input = next(iter(train_loader))
     model.print_model_summary(mock_input)
 
     tb_logs_dir = os.path.join(experiment_root, 'tblogs')
@@ -97,7 +110,8 @@ def main():
     model_save_path = os.path.join(experiment_root, 'ckpts')
     os.makedirs(model_save_path, exist_ok=True)
     model.fit(train_loader, ts.TRAIN.N_STEP, ts.TRAIN.LEARNING_RATE, ts.TRAIN.WEIGHT_DECAY, ts.TRAIN.LR_DROP_FACTOR,
-              ts.TRAIN.LR_DROP_PATIENCE, 10, model_save_path, tb_writer)
+              ts.TRAIN.LR_DROP_PATIENCE, ts.TRAIN.MODEL_CKPT_EVERY_N_STEP, model_save_path,
+              ts.TRAIN.RUNNING_LOSS_INTERVAL, ts.TRAIN.BURN_IN_STEP, tb_writer)
 
     tb_writer.close()
     logger.info('Finished Training!!!')

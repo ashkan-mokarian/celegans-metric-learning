@@ -1,4 +1,6 @@
 import logging
+import time
+
 import os
 
 import torch
@@ -65,7 +67,7 @@ class SiamesePixelwiseModel:
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
         step = checkpoint['step']
         loss = checkpoint['loss']
-        logger.info(f'Model loaded from:[{filename}]. step:[{step}]. loss:[{loss}]')
+        logger.info(f'Loaded model from:[{filename}]. step:[{step}]. loss:[{loss}]')
         return step, loss
 
     def print_model_summary(self, sample_data):
@@ -89,7 +91,7 @@ class SiamesePixelwiseModel:
             weight_decay=weight_decay
             )
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=lr_drop_factor, patience=lr_drop_patience, verbose=True
+            optimizer, mode='max', factor=lr_drop_factor, patience=lr_drop_patience, verbose=True
             )
         if load_state:
             if self.load_model_path:
@@ -138,7 +140,7 @@ class SiamesePixelwiseModel:
         return loss
 
     def fit(self, train_loader, n_step, learning_rate, weight_decay, lr_drop_factor, lr_drop_patience,
-            model_ckpt_every_n_step, model_save_path, tb_writer=None):
+            model_ckpt_every_n_step, model_save_path, runnin_loss_interval, burn_in_step, tb_writer=None):
         criterion = self._define_criterion()
         optimizer, lr_scheduler = self._define_optimizer(learning_rate, weight_decay, lr_drop_factor, lr_drop_patience)
 
@@ -152,18 +154,45 @@ class SiamesePixelwiseModel:
 
         self.model.train()
 
+        running_loss_timer = time.time()
+        running_loss = np.zeros(runnin_loss_interval)
         for step in range(self.step+1, n_step+1):
             inputs = next(train_iter)
             loss = self._train_one_iteration(inputs, criterion, optimizer)
 
-            # TODO: should be used on a validation loss of some sort, and not the iteration loss. the loss has to
-            #  have some meaning of average over epoch, and not for every update iteration. but just for now,
-            #  lets do this
-            # lr_scheduler.step(loss)
+            running_loss[:-1] = running_loss[1:]; running_loss[-1] = loss.item()
 
             tb_writer.add_scalar('Loss/train', loss.item(), step)
             tb_writer.add_scalar('lr', optimizer.param_groups[0]['lr'], step)
 
             if step % model_ckpt_every_n_step == 0:
-                self.save_model(step, optimizer, lr_scheduler, loss,
-                                os.path.join(model_save_path, f'model-{step}.pth'))
+                self.save_model(step, optimizer, lr_scheduler, running_loss.mean(),
+                                os.path.join(model_save_path, f'model-step={step}.pth'))
+
+            if step % runnin_loss_interval == 0:
+                avg_running_loss = running_loss.mean()
+                if avg_running_loss < self.best_loss:
+                    self.best_loss = avg_running_loss
+                    if step > burn_in_step:
+                        # Saving best model
+                        existing_best_model = [os.path.join(model_save_path, f) for f in os.listdir(model_save_path) if
+                                               f.startswith('bestmodel')]
+                        if existing_best_model:
+                            os.remove(existing_best_model[0])
+                        self.save_model(step, optimizer, lr_scheduler, avg_running_loss,
+                                        os.path.join(model_save_path, f'bestmodel-step={step}-running_loss='
+                                                                      f'{avg_running_loss:.4f}.pth'))
+
+                # preferably do it every epoch, but since no epoch meaning, use running_loss_interval instead
+                if tb_writer:
+                    for param_name, param in self.model.named_parameters():
+                        tb_writer.add_histogram(param_name, param.data, step)
+
+                # TODO: best case scenario should be a validation loss or metric of some sort, but running_loss for now
+                lr_scheduler.step(avg_running_loss)
+
+                logger.info(f'steps [{step}/{n_step}] - running_loss [{avg_running_loss:.5f}] - time ['
+                            f'{time.time()-running_loss_timer:.2f}s]')
+                running_loss_timer = time.time()
+
+
