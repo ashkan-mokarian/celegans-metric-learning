@@ -12,8 +12,8 @@ import torch
 class DiscriminativeLoss(_Loss):
 
     def __init__(self, delta_var=0.5, delta_dist=1.5, norm=2, alpha=1.0,
-                 beta=1.0, gamma=0.001, usegpu=True, size_average=True):
-        super(DiscriminativeLoss, self).__init__(size_average)
+                 beta=1.0, gamma=0.001, usegpu=True):
+        super(DiscriminativeLoss, self).__init__()
         self.delta_var = float(delta_var)
         self.delta_dist = float(delta_dist)
         self.norm = norm
@@ -28,11 +28,12 @@ class DiscriminativeLoss(_Loss):
         return self._discriminative_loss(input, target, n_clusters)
 
     def _discriminative_loss(self, input, target, n_clusters):
-        bs, n_features, xsize, ysize, zsize = input.size()
-        max_n_clusters = target.size(1)
-
-        input = input.contiguous().view(bs, n_features, xsize*ysize*zsize)
-        target = target.contiguous().view(bs, max_n_clusters, xsize*ysize*zsize)
+        # Since this is done in the model.fit, to be able to concatenate two patches, they are commented in here
+        # bs, n_features, xsize, ysize, zsize = input.size()
+        # max_n_clusters = target.size(1)
+        #
+        # input = input.contiguous().view(bs, n_features, xsize*ysize*zsize)
+        # target = target.contiguous().view(bs, max_n_clusters, xsize*ysize*zsize)
 
         c_means = self._cluster_means(input, target, n_clusters)
         l_var = self._variance_term(input, target, c_means, n_clusters)

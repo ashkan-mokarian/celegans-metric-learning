@@ -6,10 +6,23 @@ name = 'default'
 # info    20
 # debug   10
 logging = 10
-debug = true
+debug = false
 #overwrite = true
+seed = 1234
 
 [path]
 #base = NONE
 #cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/cpm_dataset.pkl'
 #worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset'
+
+[model]
+model_name = 'unet'
+model_params = [1, 64, 3, 2]
+init_model_last = false
+
+[train]
+n_step = 4000
+learning_rate = 0.001
+weight_decay = 0
+lr_drop_factor = 0.1
+lr_drop_patience = 20

@@ -44,27 +44,43 @@ class General(BaseSettings):
         self.LOGGING = 20
         self.OVERWRITE = False
         self.DEBUG = False
+        self.SEED = None
+
+
+class Model(BaseSettings):
+    def __init__(self):
+        self.MODEL_NAME = None
+        self.MODEL_PARAMS = None
+        self.INIT_MODEL_PATH = None
+        self.INIT_MODEL_BEST = False
+        self.INIT_MODEL_LAST = False
+
+
+class Train(BaseSettings):
+    def __init__(self):
+        self.N_STEP = None
+        self.LEARNING_RATE = None
+        self.WEIGHT_DECAY = None
+        self.LR_DROP_FACTOR = None
+        self.LR_DROP_PATIENCE = None
 
 
 class Settings(BaseSettings):
     """Populates setting values (path, data params, train params, etc) with defaults values. overwrites the ones
     available in the provided config files"""
-    def __init__(self, name=None, confs=None):
+    def __init__(self, confs=None):
         base_path = get_abs_join_path(
             __file__,
             os.path.pardir,
             os.path.pardir,
             os.path.pardir
             )
-        self.NAME = name
+        self.NAME = None
         self.PATH = Path(base_path=base_path)
         self.GENERAL = General()
-
+        self.MODEL = Model()
+        self.TRAIN = Train()
         self.read_confs(confs)
-
-        # overwrite given name, instead of reading it from conf
-        if name:
-            self.NAME = name
 
     def read_confs(self, confs=None):
         if confs is None:
