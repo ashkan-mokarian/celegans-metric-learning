@@ -75,8 +75,9 @@ class SiamesePixelwiseModel:
         input_size = sample_data['raw1'].size()[1:]
         print('Backbone Summary:')
         torchsummary.summary(self.model.embedding_net, input_size)
-        print('Siamese  Summary:')
-        torchsummary.summary(self.model, [input_size, input_size])
+        # Do not need this, since torchsummary does not count weight sharing -> wrong trainable param information, etc.
+        # print('Siamese  Summary:')
+        # torchsummary.summary(self.model, [input_size, input_size])
 
     @staticmethod
     def _define_criterion():
@@ -97,6 +98,7 @@ class SiamesePixelwiseModel:
             if self.load_model_path:
                 checkpoint = torch.load(self.load_model_path)
                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
         return optimizer, lr_scheduler
 
     def _train_one_iteration(self, inputs, criterion, optimizer):

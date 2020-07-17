@@ -24,19 +24,61 @@ class BaseSettings:
         # s += '\t'*depth + '\n'
         return s
 
+    def read_confs(self, confs=None):
+        if confs is None:
+            logger.debug("confs value from cli input is None")
+            pass
+        if not isinstance(confs, list):
+            confs = [confs]
+        for conf in confs:
+            if os.path.isfile(conf):
+                _replace_attrs_with_dict(self, toml.load(conf))
+            else:
+                found_conf = []
+                for r, d, f in os.walk(DEFAULT_PATH.EXPERIMENTS_CFG):
+                    for file in f:
+                        if file == conf +'.toml' or file == conf:
+                            found_conf.append(get_abs_join_path(r, file))
+                assert len(found_conf) == 1,\
+                    f'Foudn too many config files with the same name {conf} in {DEFAULT_PATH.EXPERIMENTS_CFG}'
+                _replace_attrs_with_dict(self, toml.load(found_conf[0]))
 
-class Path(BaseSettings):
-    def __init__(self, base_path):
-        self.BASE = base_path
-        self.DATA = get_abs_join_path(base_path, 'data')
+    def get_toml_dict(self, filename=None):
+        toml_dict = {}
+        for attr, attrval in self.__dict__.items():
+            if isinstance(attrval, BaseSettings):
+                toml_dict.update({attr: attrval.get_toml_dict()})
+            else:
+                toml_dict.update({attr:attrval})
+        if filename:
+            with open(filename, 'w') as f:
+                toml.dump(toml_dict, f=f)
+        return toml_dict
+
+
+class DefaultPath(BaseSettings):
+    def __init__(self):
+        self.BASE = get_abs_join_path(
+            __file__,
+            os.path.pardir,
+            os.path.pardir,
+            os.path.pardir
+            )
+        self.DATA = get_abs_join_path(self.BASE, 'data')
         self.DATA_INTERIM = get_abs_join_path(self.DATA, 'interim')
-        proc_data = get_abs_join_path(base_path, 'data', 'processed')
+        proc_data = get_abs_join_path(self.BASE, 'data', 'processed')
         self.CPM_DATASET = get_abs_join_path(proc_data, 'cpm_dataset.pkl')
         self.WORMS_DATASET = get_abs_join_path(proc_data, 'worms_dataset')
+        self.EXPERIMENTS = get_abs_join_path(self.BASE, 'experiments')
+        self.EXPERIMENTS_CFG = get_abs_join_path(self.BASE, 'experiments_cfg')
+DEFAULT_PATH = DefaultPath()
 
-        self.EXPERIMENTS = get_abs_join_path(base_path, 'experiments')
 
-        self.EXPERIMENTS_CFG = get_abs_join_path(base_path, 'experiments_cfg')
+class Path(BaseSettings):
+    def __init__(self):
+        self.EXPERIMENT_ROOT = None
+        self.WORMS_DATASET = None
+        self.CPM_DATASET = None
 
 
 class General(BaseSettings):
@@ -68,41 +110,23 @@ class Train(BaseSettings):
         self.LR_DROP_PATIENCE = None
 
 
+class Data(BaseSettings):
+    def __init__(self):
+        self.N_WORKER = None
+        self.PATCH_SIZE = None
+
+
 class Settings(BaseSettings):
     """Populates setting values (path, data params, train params, etc) with defaults values. overwrites the ones
     available in the provided config files"""
     def __init__(self, confs=None):
-        base_path = get_abs_join_path(
-            __file__,
-            os.path.pardir,
-            os.path.pardir,
-            os.path.pardir
-            )
         self.NAME = None
-        self.PATH = Path(base_path=base_path)
+        self.PATH = Path()
         self.GENERAL = General()
         self.MODEL = Model()
         self.TRAIN = Train()
+        self.DATA = Data()
         self.read_confs(confs)
-
-    def read_confs(self, confs=None):
-        if confs is None:
-            logger.debug("confs value from cli input is None")
-            pass
-        if not isinstance(confs, list):
-            confs = [confs]
-        for conf in confs:
-            if os.path.isfile(conf):
-                self._read_conf(conf)
-            else:
-                found_conf = []
-                for r, d, f in os.walk(self.PATH.EXPERIMENTS_CFG):
-                    for file in f:
-                        if file == conf +'.toml' or file == conf:
-                            found_conf.append(get_abs_join_path(r, file))
-                assert len(found_conf) == 1,\
-                    f'Foudn too many config files with the same name {conf} in {self.PATH.EXPERIMENTS_CFG}'
-                _replace_attrs_with_dict(self, toml.load(found_conf[0]))
 
 
 def _replace_attrs_with_dict(obj, conf):
@@ -118,6 +142,6 @@ def _replace_attrs_with_dict(obj, conf):
 
 
 if __name__ == '__main__':
-    sett = Settings('Cat', confs='train_default')
-    print(sett)
+    sett = Settings(confs='train_default')
+    a = sett.get_toml_dict()
     print('Finished')

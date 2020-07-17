@@ -6,15 +6,14 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from settings import Settings
+import _init_paths
+
+from settings import Settings, DefaultPath
 from lib.utils.general import generate_run_id
 from lib.data.siamese_worms_dataset import SiameseWormsDataset
 from lib.models.siamese_pixelwise_model import SiamesePixelwiseModel
 
 logger = logging.getLogger(__name__)
-
-# Some constants for now
-PATCH_SIZE = (52, 52, 52)
 
 
 def get_settings():
@@ -46,6 +45,15 @@ def get_settings():
 
     assert sum(bool(x) for x in [ts.MODEL.INIT_MODEL_LAST, ts.MODEL.INIT_MODEL_BEST, ts.MODEL.INIT_MODEL_PATH]) <= 1, \
         'Cannot set path/best/last model saving together'
+
+    DEFAULT_PATH = DefaultPath()
+    if not ts.PATH.EXPERIMENT_ROOT:
+        ts.PATH.EXPERIMENT_ROOT = DEFAULT_PATH.EXPERIMENTS
+    if not ts.PATH.WORMS_DATASET:
+        ts.PATH.WORMS_DATASET = DEFAULT_PATH.WORMS_DATASET
+    if not ts.PATH.CPM_DATASET:
+        ts.PATH.CPM_DATASET = DEFAULT_PATH.CPM_DATASET
+
     return ts
 
 
@@ -53,7 +61,7 @@ def main():
     ts = get_settings()
 
     # experiment root
-    experiment_root = os.path.join(ts.PATH.EXPERIMENTS, ts.NAME)
+    experiment_root = os.path.join(ts.PATH.EXPERIMENT_ROOT, ts.NAME)
     load_model_path = None
 
     ckpts_root = os.path.join(experiment_root, 'ckpts')
@@ -71,7 +79,7 @@ def main():
     elif os.path.exists(experiment_root):
         run_id = generate_run_id()
         ts.NAME = ts.NAME + '-' + run_id
-        experiment_root = os.path.join(ts.PATH.EXPERIMENTS, ts.NAME)
+        experiment_root = os.path.join(ts.PATH.EXPERIMENT_ROOT, ts.NAME)
     os.makedirs(experiment_root, exist_ok=True)
 
     # set logger
@@ -92,10 +100,11 @@ def main():
 
     logger.info("Start Training.")
     logger.info("Setting:" + str(ts))
+    ts.get_toml_dict(os.path.join(experiment_root, 'train.toml'))
 
     train_dataset = SiameseWormsDataset(ts.PATH.WORMS_DATASET, ts.PATH.CPM_DATASET,
-                                        patch_size=PATCH_SIZE)
-    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=False, num_workers=1)
+                                        patch_size=ts.DATA.PATCH_SIZE)
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=False, num_workers=ts.DATA.N_WORKER)
 
     model = SiamesePixelwiseModel(ts.MODEL.MODEL_NAME,
                                   ts.MODEL.MODEL_PARAMS,
