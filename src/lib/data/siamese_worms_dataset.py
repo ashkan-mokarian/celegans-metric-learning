@@ -7,7 +7,7 @@ import os
 import random
 import numpy as np
 
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, Dataset
 import torch
 
 logging.getLogger(__name__)
@@ -103,3 +103,63 @@ class SiameseWormsDataset(IterableDataset):
 
         else:  # self.train == False
             raise NotImplemented
+
+
+# TODO: This looks super STUPID. but for now
+class WormsDatasetOverSeghypCenters:
+    def __init__(self,
+                 worms_dataset_root,
+                 patch_size):
+        # super(WormsDatasetOverSeghypCenters, self).__init__()
+        self.worms_data = glob.glob(os.path.join(worms_dataset_root, "*.hdf"))
+        self.patch_size = patch_size
+
+    def __len__(self):
+        return len(self.worms_data)
+
+    def __getitem__(self, idx):
+        return OneWormDatasetOverSeghypCenters(self.worms_data[idx], patch_size=self.patch_size)
+
+
+class OneWormDatasetOverSeghypCenters(Dataset):
+    def __init__(self,
+                 worm_data,
+                 patch_size):
+        super(OneWormDatasetOverSeghypCenters, self).__init__()
+        self.worm_data = worm_data
+        self.aaa = 0
+        self.patch_size = np.array(patch_size)
+        with h5py.File(self.worm_data, 'r') as f:
+            self.raw = f['volumes/raw'][()]
+            self.seghyp = f['volumes/nuclei_seghyp'][()]
+            self.con_seghyp = f['matrix/con_seghyp'][()]
+            self.gt_label = f['volumes/gt_nuclei_labels'][()]
+
+    def __len__(self):
+        return self.con_seghyp.shape[0]-1  # first one is background label 0 with con [0, 0, 0]
+
+    def __getitem__(self, tmp_idx):
+        idx = tmp_idx + 1
+        con_idx = np.round(self.con_seghyp[idx]).astype(dtype=np.int)
+        corner = con_idx - self.patch_size//2
+        corner[corner < 0] = 0
+        patch = (slice(corner[0], corner[0]+self.patch_size[0]),
+                 slice(corner[1], corner[1]+self.patch_size[1]),
+                 slice(corner[2], corner[2]+self.patch_size[2]))
+
+        raw = self.raw[patch]
+        raw = np.expand_dims(raw, axis=0)  # add channel dim
+        masktmp = self.seghyp[patch]
+        mask = np.zeros_like(masktmp)
+        mask[masktmp==idx] = 1
+        gt_label = self.gt_label[patch]
+        gt_label_ids = gt_label[mask==1]
+        gt_label_id = gt_label_ids[0]
+        assert np.all(gt_label_ids == gt_label_id)
+        gt_label_id = np.array(gt_label_id)
+        sample = {'patch_reference_corner': corner,
+                  'raw': raw,
+                  'mask': mask,
+                  'gt_label_id': gt_label_id}
+        sample = {k: torch.from_numpy(v.astype(np.int16)) for k, v in sample.items()}
+        return sample
