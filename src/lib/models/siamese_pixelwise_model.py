@@ -1,12 +1,13 @@
 import logging
 import time
-
 import os
 
 import torch
 import torch.nn as nn
 import torchsummary
 import numpy as np
+from sklearn.cluster import KMeans
+from joblib import dump, load
 
 from lib.modules.unet import UNet
 from lib.modules.discriminative_loss import DiscriminativeLoss
@@ -182,8 +183,7 @@ class SiamesePixelwiseModel:
                         if existing_best_model:
                             os.remove(existing_best_model[0])
                         self.save_model(step, optimizer, lr_scheduler, avg_running_loss,
-                                        os.path.join(model_save_path, f'bestmodel-step={step}-running_loss='
-                                                                      f'{avg_running_loss:.4f}.pth'))
+                                        os.path.join(model_save_path, f'bestmodel-step={step}-running_loss={avg_running_loss:.4f}.pth'))
 
                 # preferably do it every epoch, but since no epoch meaning, use running_loss_interval instead
                 if tb_writer:
@@ -197,4 +197,38 @@ class SiamesePixelwiseModel:
                             f'{time.time()-running_loss_timer:.2f}s]')
                 running_loss_timer = time.time()
 
+    @staticmethod
+    def get_avg_embedding_over_mask(batched_embedding , batched_mask):
+        output_list = []
+        bs, n_features, xsize, ysize, zsize = batched_embedding.size()
+        batched_embedding = batched_embedding.contiguous().view(bs, n_features, xsize*ysize*zsize)
+        batched_mask = batched_mask.contiguous().view(bs, xsize*ysize*zsize)
+        for i in range(bs):
+            output_list.append(
+                batched_embedding[i, :, :].sum(1) / batched_mask[i, :].sum()
+                )
+        return output_list
 
+    def compute_cluster_centers(self, n_cluster, data_loader, cluster_save_file=None, num_workers=1, tb_writer=None):
+        all_avg_embeddings_per_seghyp = []
+        self.model.eval()
+        for n_worm, worm_dataset in enumerate(data_loader):
+            logger.info(f'worm: {n_worm+1}/{len(data_loader)} - n_seghyp={len(worm_dataset)}')
+            worm_loader = torch.utils.data.DataLoader(worm_dataset, shuffle=False, num_workers=num_workers)
+            for n_seghyp, seghyp in enumerate(worm_loader):
+                with torch.no_grad():
+                    raw = seghyp['raw'].float().cuda()
+                    mask = seghyp['mask'].float().cuda()
+
+                    batched_embedding = self.model.get_embedding(raw)
+                    batched_avg_embedding = self.get_avg_embedding_over_mask(batched_embedding, mask)
+                    all_avg_embeddings_per_seghyp.extend(
+                        [avg_embd.cpu().numpy() for avg_embd in batched_avg_embedding])
+
+        all_avg_embeddings_per_seghyp = np.vstack(all_avg_embeddings_per_seghyp)
+
+        kmeans = KMeans(n_clusters=n_cluster).fit(all_avg_embeddings_per_seghyp)
+        logger.info(f'Save scipy.cluster.KMeans model at: [{cluster_save_file}]')
+        os.makedirs(os.path.dirname(cluster_save_file), exist_ok=True)
+        dump(kmeans, cluster_save_file)
+        return kmeans

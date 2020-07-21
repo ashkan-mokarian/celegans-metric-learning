@@ -100,6 +100,7 @@ class Model(BaseSettings):
 
 class Train(BaseSettings):
     def __init__(self):
+        self.N_CLUSTER = None
         self.N_STEP = None
         self.MODEL_CKPT_EVERY_N_STEP = None
         self.RUNNING_LOSS_INTERVAL = None

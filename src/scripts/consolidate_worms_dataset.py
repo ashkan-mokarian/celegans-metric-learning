@@ -91,6 +91,7 @@ def main():
         nuclei_seghyp = to_array(label_f).astype(np.uint16)
         con_seghyp = ndimage.measurements.center_of_mass(
             1*(nuclei_seghyp>0), nuclei_seghyp, range(1, np.max(nuclei_seghyp)+1, 1))
+
         con_seghyp = np.vstack(con_seghyp)
         con_seghyp = np.vstack([np.zeros(3), con_seghyp])  # label ids always start from 1. 0 reserved background
 

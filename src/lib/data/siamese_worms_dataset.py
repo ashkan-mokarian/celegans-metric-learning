@@ -127,13 +127,13 @@ class OneWormDatasetOverSeghypCenters(Dataset):
                  patch_size):
         super(OneWormDatasetOverSeghypCenters, self).__init__()
         self.worm_data = worm_data
-        self.aaa = 0
         self.patch_size = np.array(patch_size)
         with h5py.File(self.worm_data, 'r') as f:
             self.raw = f['volumes/raw'][()]
             self.seghyp = f['volumes/nuclei_seghyp'][()]
             self.con_seghyp = f['matrix/con_seghyp'][()]
             self.gt_label = f['volumes/gt_nuclei_labels'][()]
+        self.full_size = self.raw.shape
 
     def __len__(self):
         return self.con_seghyp.shape[0]-1  # first one is background label 0 with con [0, 0, 0]
@@ -141,7 +141,11 @@ class OneWormDatasetOverSeghypCenters(Dataset):
     def __getitem__(self, tmp_idx):
         idx = tmp_idx + 1
         con_idx = np.round(self.con_seghyp[idx]).astype(dtype=np.int)
-        corner = con_idx - self.patch_size//2
+        # TODO: maybe do padding insted of this nonesense, or does it make sense?
+        # shift corner slightly so we don't get out-of-bound
+        other_corner_extra = con_idx + self.patch_size//2 - self.full_size
+        other_corner_extra[other_corner_extra<0] = 0
+        corner = con_idx - self.patch_size//2 - other_corner_extra
         corner[corner < 0] = 0
         patch = (slice(corner[0], corner[0]+self.patch_size[0]),
                  slice(corner[1], corner[1]+self.patch_size[1]),
@@ -154,6 +158,8 @@ class OneWormDatasetOverSeghypCenters(Dataset):
         mask[masktmp==idx] = 1
         gt_label = self.gt_label[patch]
         gt_label_ids = gt_label[mask==1]
+        if len(gt_label_ids)==0:
+            print('ooooops')
         gt_label_id = gt_label_ids[0]
         assert np.all(gt_label_ids == gt_label_id)
         gt_label_id = np.array(gt_label_id)
