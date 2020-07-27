@@ -4,6 +4,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def read_pm_sol_listfrmt(file):
+    pm = dict()
+    with open(file) as f:
+        target_labels = f.readline()
+    target_labels = target_labels[1:-1].split(',')
+    pm.update({int(k):int(v) for k, v in enumerate(target_labels) if 'null' not in v})
+    return pm
+
+
 def read_pm_sol_kolmogorov(file):
     pm = dict()
     try:

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="consolidate_cpm_dataset_lisa" type="PythonConfigurationType" factoryName="Python">
+  <configuration default="false" name="consolidate_cpm_dataset" type="PythonConfigurationType" factoryName="Python">
     <module name="worms-nuclei-metric-learning" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -12,8 +12,8 @@
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/scripts/consolidate_cpm_dataset_amira.py" />
-    <option name="PARAMETERS" value="-c &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/experiments_cfg/consolidation_default.toml&quot; -i &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/2020-07-22_w2w-solutions_3xLAP_1xTKR1000_Fusion&quot; -i2 &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg&quot; --pm_sol_format &quot;lisa&quot;" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/scripts/consolidate_cpm_dataset.py" />
+    <option name="PARAMETERS" value="-c &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/experiments_cfg/consolidation_default.toml&quot; -i &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/2020-07-22_w2w-solutions_3xLAP_1xTKR1000_Fusion&quot;" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -38,4 +38,4 @@ class Labels(object):
         if self._labels:
             return label.upper() in self._labels
         else:
-            return False
+            return ValueError
