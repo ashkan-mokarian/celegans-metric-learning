@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+# noinspection PyUnresolvedReferences
 import _init_paths
 
 from settings import Settings, DefaultPath

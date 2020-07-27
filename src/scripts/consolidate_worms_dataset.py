@@ -30,8 +30,7 @@ def get_config_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-c', '--config', required=True, action='append',
-                        help='path to config file, containing default project'
-                             'config to access universe.txt and worm_names.txt')
+                        help='path to config file, config to access universe.txt and worm_names.txt')
     parser.add_argument('-i', '--raw_worms_root', required=True, type=str,
                         help='path to raw worms data (30WormsImagesGroundTruthSeg)')
     parser.add_argument('-o', '--output_path', type=str,
@@ -48,17 +47,30 @@ def get_config_arguments():
     return config
 
 
-def main():
-    config = get_config_arguments()
+def main(config):
+    """generates .hdf datasets per worm (e.g. 01.hdf, 02.hdf, ...). numbers match with worm_names.txt
 
+    Params:
+    -------
+    config: (dict) has following keys:
+        ... keys mentioned in experiments_cfg/consolidation_default.toml
+          - ['path']['raw_worms_root']: path to raw `30WormsImagesGroundTruthSeg`
+        Note: output_path is the same as worms_dataset in .toml file
+    """
     # set logger
+    os.makedirs(os.path.abspath(config['path']['worms_dataset']), exist_ok=True)
     logging.basicConfig(
         format='%(name)s:%(levelname)s [%(asctime)s]: %(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
-        level=config['general']['logging']
+        level=config['general']['logging'],
+        handlers=[
+            logging.FileHandler(os.path.join(config['path']['worms_dataset'], 'consolidate_worms_dataset.log')),
+            logging.StreamHandler()
+            ]
         )
 
-    logging.info('\n' + pprint.pformat(config))
+    logger.info('Starting consolidate_worms_dataset with following config:')
+    logger.info('\n' + pprint.pformat(config))
 
     # For every worm, read and compute only necessary data and store in one .hdf file, replace all worm with their
     # unique id from worm_names.txt. Also replace unique labeling of nuclei from universe.txt only for gt data (to
@@ -66,11 +78,13 @@ def main():
     raw_fn = 'imagesAsMhdRawAligned/{}.mhd'
     label_fn = 'groundTruthInstanceSeg/{}.ano.curated.aligned.tiff'
     label_metadata_fn = 'groundTruthInstanceSeg/{}.ano.curated.aligned.txt'
+    output_fn = 'worm{:02}.hdf'
 
     worms = lib.data.worms.Worms(config['path']['worm_names'])
     ulabels = lib.data.labels.Labels(config['path']['universe_labels'])
 
-    for wid in range(len(worms._worm_names)):
+    for n in range(len(worms._worm_names)):
+        wid = n+1  # Start from 1, to be consistent with e.g. Lisa s code.
         wname = worms.uid_to_name(wid)
         raw_f = os.path.join(
             config['path']['raw_worms_root'],
@@ -84,11 +98,20 @@ def main():
             config['path']['raw_worms_root'],
             label_metadata_fn.format(wname)
             )
+        output_f = os.path.abspath(os.path.join(
+            config['path']['worms_dataset'],
+            output_fn.format(worms.name_to_uid(wname))
+            ))
+
+        logger.info(f'wormname:[{wname}], wid:[{worms.name_to_uid(wname):2}], raw_file:[{raw_f}], labeldata_file:['
+                    f'{label_f}], labelmetadata_file:[{labelmetadata_f}], output_file:[{output_f}]')
 
         raw = to_array(raw_f).astype(np.uint8)
         # get nuclei segmentation hypothesis mask and their corresponding centers, here labels don't have necessarily
-        # any meaning but they correspond with label names from labelmetadata_f
+        # any meaning but they correspond with label names from labelmetadata_f (.ano.curated.aligned.txt)
         nuclei_seghyp = to_array(label_f).astype(np.uint16)
+        logger.debug(f'n_seghyp:[{np.max(nuclei_seghyp)}]')
+
         con_seghyp = ndimage.measurements.center_of_mass(
             1*(nuclei_seghyp>0), nuclei_seghyp, range(1, np.max(nuclei_seghyp)+1, 1))
 
@@ -115,11 +138,10 @@ def main():
             1*(gt_nuclei_labels>0), gt_nuclei_labels, valid_label_list)
         for no, valid_label in enumerate(valid_label_list):
             gt_con_labels[valid_label] = np.array(con_valid[no])
+        logger.debug(f'n_labels in universe:[{len(valid_label_list)}]')
 
-        output_file = os.path.join(config['path']['worms_dataset'], str(wid) + '.hdf')
-        output_file = os.path.abspath(output_file)
-        if os.path.exists(output_file) and not config['general']['overwrite']:
-            logger.info('output file already exists. Turn on overwrite to overwrite. File: {}'.format(output_file))
+        if os.path.exists(output_f) and not config['general']['overwrite']:
+            logger.info('output file already exists. Turn on overwrite to overwrite. File: {}'.format(output_f))
             break
         else:
             # TODO: find a workaround
@@ -130,7 +152,7 @@ def main():
             #     os.umask(original_umask)
             # os.makedirs(output_file, exist_ok=True)  # have to create the directory manually, otherwise hdf5 error,
             # probably permission issues
-            with h5py.File(output_file, 'w') as f:
+            with h5py.File(output_f, 'w') as f:
 
                 f.create_dataset(
                     'volumes/raw',  # raw input, without any normalization etc. [140x140x1166] uint8 values
@@ -167,4 +189,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    config = get_config_arguments()
+    main(config)

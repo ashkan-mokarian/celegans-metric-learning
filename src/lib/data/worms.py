@@ -14,12 +14,12 @@ class Worms(object):
 
     def _get_name_to_uid_map(self):
         name_to_uid = dict()
-        name_to_uid.update([(name, uid) for uid, name in enumerate(self._worm_names)])
+        name_to_uid.update([(name, uid) for uid, name in enumerate(self._worm_names, start=1)])
         return name_to_uid
 
     def _get_uid_to_name_map(self):
         uid_to_name = dict()
-        uid_to_name.update([(uid, name) for uid, name in enumerate(self._worm_names)])
+        uid_to_name.update([(uid, name) for uid, name in enumerate(self._worm_names, start=1)])
         return uid_to_name
 
     def name_to_uid(self, label):

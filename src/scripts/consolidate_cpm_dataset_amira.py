@@ -1,3 +1,5 @@
+# Since using amira to get results is not easy, stick to Lisa's code as default, and keep this only if needed later
+
 """Creates a processed dataset for consistent matches between two worms based on pairwise matching solution files
 
 consider the two worms w1='C18G1_2L1_1" and w2='cnd1threeL1_1213061'.
@@ -26,7 +28,7 @@ import pprint
 from lib import utils
 import lib.data.worms
 import lib.data.labels
-import lib.data.comb_pm as comb_pm
+from lib.utils.textparser import read_seghyp_names, read_pm_sol_kolmogorov
 
 # noinspection PyUnresolvedReferences
 import _init_paths
@@ -39,17 +41,40 @@ def get_consistent_pm(w1_w2_pm, w2_w1_pm):
     return cpm
 
 
+def read_nuclei_names(file):
+    nuclei_names = list()
+    try:
+        with open(file) as f:
+            for line in f:
+                nuclei_names.append(line.strip().upper())
+    except FileNotFoundError:
+        raise FileNotFoundError
+    return nuclei_names
+
+
+def relabel_pm(pm_sol, nuclei_names1, nuclei_names2, reference_names1, reference_names2):
+    rpm = dict()
+    for id1, id2 in pm_sol.items():
+        name1 = nuclei_names1[id1]
+        name2 = nuclei_names2[id2]
+        if name1 in reference_names1 and name2 in reference_names2:
+            rid1 = reference_names1.index(name1)
+            rid2 = reference_names2.index(name2)
+            rpm.update({rid1: rid2})
+    return rpm
+
+
 def get_rpm(w1_w2_pm_file, w2_w1_pm_file, w1_nuclei_names_file, w2_nuclei_names_file, w1_seghyp_names_file,
             w2_seghyp_names_file):
-    w1_w2_pm = comb_pm.read_pm_sol(w1_w2_pm_file)
-    w2_w1_pm = comb_pm.read_pm_sol(w2_w1_pm_file)
-    w1_nuclei_names = comb_pm.read_nuclei_names(w1_nuclei_names_file)
-    w2_nuclei_names = comb_pm.read_nuclei_names(w2_nuclei_names_file)
-    w1_seghyp_names = comb_pm.read_seghyp_names(w1_seghyp_names_file)
-    w2_seghyp_names = comb_pm.read_seghyp_names(w2_seghyp_names_file)
+    w1_w2_pm = read_pm_sol_kolmogorov(w1_w2_pm_file)
+    w2_w1_pm = read_pm_sol_kolmogorov(w2_w1_pm_file)
+    w1_nuclei_names = read_nuclei_names(w1_nuclei_names_file)
+    w2_nuclei_names = read_nuclei_names(w2_nuclei_names_file)
+    w1_seghyp_names = read_seghyp_names(w1_seghyp_names_file)
+    w2_seghyp_names = read_seghyp_names(w2_seghyp_names_file)
 
-    w1_w2_rpm = comb_pm.relabel_pm(w1_w2_pm, w1_nuclei_names, w2_nuclei_names, w1_seghyp_names, w2_seghyp_names)
-    w2_w1_rpm = comb_pm.relabel_pm(w2_w1_pm, w2_nuclei_names, w1_nuclei_names, w2_seghyp_names, w1_seghyp_names)
+    w1_w2_rpm = relabel_pm(w1_w2_pm, w1_nuclei_names, w2_nuclei_names, w1_seghyp_names, w2_seghyp_names)
+    w2_w1_rpm = relabel_pm(w2_w1_pm, w2_nuclei_names, w1_nuclei_names, w2_seghyp_names, w1_seghyp_names)
 
     return w1_w2_rpm, w2_w1_rpm
 
@@ -126,9 +151,12 @@ def main():
     # pm: pairwise matching, cpm: consistent pm
 
     for i in range(num_worms-1):
+        w1uid = i+1
+        w1name = worms.uid_to_name(w1uid)
         for j in range(i+1, num_worms):
-            w1name = worms.uid_to_name(i)
-            w2name = worms.uid_to_name(j)
+            w2uid = j+1
+            w2name = worms.uid_to_name(w2uid)
+
             w1_w2_pm_file = os.path.join(
                 config['path']['input_pm_sols'],
                 solfile_name_pattern.format(w1name, w2name)
@@ -155,7 +183,8 @@ def main():
                 )
 
             logging.debug('w2w_consistent_pm:{}-{}: Files:\n\t[{}]\n\t[{}]\n\t[{}]\n\t[{}]\n\t[{}]\n\t[{}]'.format(
-                i, j, w1_w2_pm_file, w2_w1_pm_file, w1_nuclei_names_file, w2_nuclei_names_file, w1_seghyp_names_file,
+                w1uid, w2uid, w1_w2_pm_file, w2_w1_pm_file, w1_nuclei_names_file, w2_nuclei_names_file,
+                w1_seghyp_names_file,
                 w2_seghyp_names_file))
 
             w1_w2_rpm, w2_w1_rpm = get_rpm(w1_w2_pm_file,
@@ -169,12 +198,12 @@ def main():
                 tmptmp_w2w_cpm.update({ii+1:jj+1})
 
             # assert w2w_cpm.get(i, {}).get(j) is None
-            assert w2w_cpm.get(f'{i}-{j}') is None
-            w2w_cpm.update({f'{i}-{j}': tmptmp_w2w_cpm})
+            assert w2w_cpm.get(f'{w1uid}-{w2uid}') is None
+            w2w_cpm.update({f'{w1uid}-{w2uid}': tmptmp_w2w_cpm})
 
             # Just for logging purpose
-            w1_w2_pm = comb_pm.read_pm_sol(w1_w2_pm_file)
-            w2_w1_pm = comb_pm.read_pm_sol(w2_w1_pm_file)
+            w1_w2_pm = read_pm_sol_kolmogorov(w1_w2_pm_file)
+            w2_w1_pm = read_pm_sol_kolmogorov(w2_w1_pm_file)
 
             logging.info(f'w2w_cpm:{i}-{j}: (direction)#match before:after relabeling   '
                          f'(->){len(w1_w2_pm)}:{len(w1_w2_rpm)} , '

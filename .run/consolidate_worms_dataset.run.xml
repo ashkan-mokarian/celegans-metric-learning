@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/scripts/consolidate_worms_dataset.py" />
-    <option name="PARAMETERS" value="-i &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg&quot; -c /home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/experiments_cfg/default.toml" />
+    <option name="PARAMETERS" value="-i &quot;/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg&quot; -c /home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/experiments_cfg/consolidation_default.toml" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

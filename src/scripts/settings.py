@@ -71,6 +71,7 @@ class DefaultPath(BaseSettings):
         self.WORMS_DATASET = get_abs_join_path(proc_data, 'worms_dataset')
         self.EXPERIMENTS = get_abs_join_path(self.BASE, 'experiments')
         self.EXPERIMENTS_CFG = get_abs_join_path(self.BASE, 'experiments_cfg')
+        self.WORM_NAMES = get_abs_join_path(self.DATA, 'raw', 'worm_names.txt')
 DEFAULT_PATH = DefaultPath()
 
 
