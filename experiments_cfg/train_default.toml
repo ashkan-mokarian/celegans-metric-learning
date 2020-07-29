@@ -23,6 +23,10 @@ init_model_last = false
 [data]
 n_worker = 10
 patch_size = [32, 32, 32]
+n_consistent_worms = 2  # only implemented for 1 and 2
+use_leftout_labels = true  # if true, retains labels in patches that are leftout in the corresponding patch cpm data
+use_coord = true
+normalize = true
 
 [train]
 n_cluster = 558
@@ -34,3 +38,11 @@ learning_rate = 0.001
 weight_decay = 0
 lr_drop_factor = 0.1
 lr_drop_patience = 20
+
+[train.augmentation.elastic]
+control_point_spacing = [10, 10, 10]
+jitter_sigma = [1, 1, 1]
+rotation_interval = [-5, 5]
+subsample = 1
+p = 0.8
+

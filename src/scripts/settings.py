@@ -110,12 +110,31 @@ class Train(BaseSettings):
         self.WEIGHT_DECAY = None
         self.LR_DROP_FACTOR = None
         self.LR_DROP_PATIENCE = None
+        self.AUGMENTATION = Augmentation()
+
+
+class Augmentation(BaseSettings):
+    def __init__(self):
+        self.ELASTIC = Elastic()
+
+
+class Elastic(BaseSettings):
+    def __init__(self):
+        self.CONTROL_POINT_SPACING = None
+        self.JITTER_SIGMA = None
+        self.ROTATION_INTERVAL = None
+        self.SUBSAMPLE = None
+        self.P = None
 
 
 class Data(BaseSettings):
     def __init__(self):
         self.N_WORKER = None
         self.PATCH_SIZE = None
+        self.N_CONSISTENT_WORMS = None
+        self.USE_LEFTOUT_LABELS = None
+        self.USE_COORD = None
+        self.NORMALIZE = None
 
 
 class Settings(BaseSettings):
