@@ -97,7 +97,8 @@ class WormsDataset(IterableDataset):
 
                 # get a relabeling list based on cpm dataset, showing label mappings for every label in unique labels
                 max_l, relabel_map_list = self._get_relabel_map(unique_patch_labels, wuids)
-                if max_l == 0:
+                if max_l < 2:  # having 0 or 1 n_instances in a sample is not valid. 1 instance at least in the
+                    # discriminative loss does not make sense
                     continue
 
                 # now we can relabel seghyp labels based on relabel_map_list
@@ -129,8 +130,9 @@ class WormsDataset(IterableDataset):
                 tmp_seghyps = [np.zeros((max_l,) + seghyps[0].shape) for _ in seghyps]
                 for i, seghyp in enumerate(seghyps):
                     unique_labels = np.delete(np.unique(seghyp), 0)
-                    for j, l in enumerate(unique_labels):
-                        tmp_seghyps[i][j, seghyp==l] = 1
+                    for l in unique_labels:
+                        tmp_seghyps[i][l-1, seghyp==l] = 1
+
                 seghyps = tmp_seghyps
 
                 # Create batch dimensions from the lists
@@ -152,6 +154,7 @@ class WormsDataset(IterableDataset):
                 sample = {'raw': raws,
                           'label': seghyps,
                           'n_cluster': np.array(max_l)}
+
                 if self.debug:
                     sample.update({
                         'original_raw': np.vstack([np.expand_dims(a, axis=0) for a in original_raws]),
@@ -247,25 +250,34 @@ class WormsDataset(IterableDataset):
 class WormsDatasetOverSeghypCenters:
     def __init__(self,
                  worms_dataset_root,
-                 patch_size):
+                 patch_size,
+                 use_coord,
+                 normalize):
         # super(WormsDatasetOverSeghypCenters, self).__init__()
         self.worms_data = glob.glob(os.path.join(worms_dataset_root, "*.hdf"))
         self.patch_size = patch_size
+        self.use_coord = use_coord
+        self.normalize = normalize
 
     def __len__(self):
         return len(self.worms_data)
 
     def __getitem__(self, idx):
-        return OneWormDatasetOverSeghypCenters(self.worms_data[idx], patch_size=self.patch_size)
+        return OneWormDatasetOverSeghypCenters(self.worms_data[idx], patch_size=self.patch_size,
+                                               use_coord=self.use_coord, normalize=self.normalize)
 
 
 class OneWormDatasetOverSeghypCenters(Dataset):
     def __init__(self,
                  worm_data,
-                 patch_size):
+                 patch_size,
+                 use_coord,
+                 normalize):
         super(OneWormDatasetOverSeghypCenters, self).__init__()
         self.worm_data = worm_data
         self.patch_size = np.array(patch_size)
+        self.use_coord = use_coord
+        self.normalize = normalize
         with h5py.File(self.worm_data, 'r') as f:
             self.raw = f['volumes/raw'][()]
             self.seghyp = f['volumes/nuclei_seghyp'][()]
@@ -291,6 +303,20 @@ class OneWormDatasetOverSeghypCenters(Dataset):
 
         raw = self.raw[patch]
         raw = np.expand_dims(raw, axis=0)  # add channel dim
+        if self.use_coord:
+            xyz_coords = np.meshgrid(np.arange(start=corner[0], stop=corner[0] + self.patch_size[0]),
+                                     np.arange(start=corner[1], stop=corner[1] + self.patch_size[1]),
+                                     np.arange(start=corner[2], stop=corner[2] + self.patch_size[2]))
+            xyz_coords = [np.expand_dims(c, axis=0) for c in xyz_coords]
+            xyz_coords = np.vstack(xyz_coords)
+            raw = np.vstack([raw, xyz_coords])
+        if self.normalize:
+            if self.normalize:
+                raw[0] /= 255.0
+                if self.use_coord:
+                    raw[1] = (raw[1] - 70.0) / 70.0
+                    raw[2] = (raw[2] - 70.0) / 70.0
+                    raw[3] = (raw[3] - 583.0) / 583.0
         masktmp = self.seghyp[patch]
         mask = np.zeros_like(masktmp)
         mask[masktmp==idx] = 1
