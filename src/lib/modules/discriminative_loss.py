@@ -4,9 +4,13 @@ https://arxiv.org/pdf/1802.05591.pdf
 This implementation is based on following code:
 https://github.com/Wizaron/instance-segmentation-pytorch
 """
+import logging
+
 from torch.nn.modules.loss import _Loss
 from torch.autograd import Variable
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 class DiscriminativeLoss(_Loss):
@@ -23,123 +27,79 @@ class DiscriminativeLoss(_Loss):
         self.usegpu = usegpu
         assert self.norm in [1, 2]
 
-    def forward(self, input, target, n_clusters):
+    def forward(self, input, target):
         target.detach_()
-        return self._discriminative_loss(input, target, n_clusters)
+        return self._discriminative_loss(input, target)
 
-    def _discriminative_loss(self, input, target, n_clusters):
-        # Since this is done in the model.fit, to be able to concatenate two patches, they are commented in here
-        # bs, n_features, xsize, ysize, zsize = input.size()
-        # max_n_clusters = target.size(1)
-        #
-        # input = input.contiguous().view(bs, n_features, xsize*ysize*zsize)
-        # target = target.contiguous().view(bs, max_n_clusters, xsize*ysize*zsize)
+    def _discriminative_loss(self, input, target):
+        bs, n_features, xsize, ysize, zsize = input.size()
+        n_clusters = target.size(1)
+        # Since no typical batch meaning here, consider it as extra pixel wise embeddings. yes, spatial locality
+        # lost, but we don't need it from here on
+        n_loc = bs*xsize*ysize*zsize
+        input = input.transpose_(0, 1).contiguous().view(n_features, n_loc)
+        target = target.transpose_(0, 1).contiguous().view(n_clusters, n_loc)
 
-        c_means = self._cluster_means(input, target, n_clusters)
-        l_var = self._variance_term(input, target, c_means, n_clusters)
-        l_dist = self._distance_term(c_means, n_clusters)
-        l_reg = self._regularization_term(c_means, n_clusters)
-
+        c_means = self._cluster_means(input, target)
+        l_var = self._variance_term(input, target, c_means)
+        l_dist = self._distance_term(c_means)
+        l_reg = self._regularization_term(c_means)
         loss = self.alpha * l_var + self.beta * l_dist + self.gamma * l_reg
 
-        return loss
+        logger.debug(f'l_var:[{l_var}], l_dist:[{l_dist}], l_reg:[{l_reg}], loss:[{loss}]')
 
-    def _cluster_means(self, input, target, n_clusters):
-        bs, n_features, n_loc = input.size()
-        max_n_clusters = target.size(1)
+        return loss, l_var, l_dist, l_reg
 
-        # bs, n_features, max_n_clusters, n_loc
-        input = input.unsqueeze(2).expand(bs, n_features, max_n_clusters, n_loc)
-        # bs, 1, max_n_clusters, n_loc
-        target = target.unsqueeze(1)
-        # bs, n_features, max_n_clusters, n_loc
+    def _cluster_means(self, input, target):
+        n_features, n_loc = input.size()
+        n_clusters = target.size(0)
+        # n_features, n_clusters, n_loc
+        input = input.unsqueeze(1).expand(n_features, n_clusters, n_loc)
+        # 1, n_clusters, n_loc
+        target = target.unsqueeze(0)
+        # n_features, n_clusters, n_loc
         input = input * target
 
-        means = []
-        for i in range(bs):
-            # n_features, n_clusters, n_loc
-            input_sample = input[i, :, :n_clusters[i]]
-            # 1, n_clusters, n_loc,
-            target_sample = target[i, :, :n_clusters[i]]
-            # n_features, n_cluster
-            mean_sample = input_sample.sum(2) / target_sample.sum(2)
+        # n_features, n_cluster
+        mean = input.sum(2) / target.sum(2)
 
-            # padding
-            n_pad_clusters = max_n_clusters - n_clusters[i]
-            assert n_pad_clusters >= 0
-            if n_pad_clusters > 0:
-                pad_sample = torch.zeros(n_features, n_pad_clusters)
-                pad_sample = Variable(pad_sample)
-                if self.usegpu:
-                    pad_sample = pad_sample.cuda()
-                mean_sample = torch.cat((mean_sample, pad_sample), dim=1)
-            means.append(mean_sample)
+        return mean
 
-        # bs, n_features, max_n_clusters
-        means = torch.stack(means)
-
-        return means
-
-    def _variance_term(self, input, target, c_means, n_clusters):
-        bs, n_features, n_loc = input.size()
-        max_n_clusters = target.size(1)
-
-        # bs, n_features, max_n_clusters, n_loc
-        c_means = c_means.unsqueeze(3).expand(bs, n_features, max_n_clusters, n_loc)
-        # bs, n_features, max_n_clusters, n_loc
-        input = input.unsqueeze(2).expand(bs, n_features, max_n_clusters, n_loc)
-        # bs, max_n_clusters, n_loc
-        var = (torch.clamp(torch.norm((input - c_means), self.norm, 1) -
+    def _variance_term(self, input, target, c_means):
+        n_features, n_loc = input.size()
+        n_clusters = target.size(0)
+        # n_features, n_clusters, n_loc
+        c_means = c_means.unsqueeze(2).expand(n_features, n_clusters, n_loc)
+        # n_features, n_clusters, n_loc
+        input = input.unsqueeze(1).expand(n_features, n_clusters, n_loc)
+        # n_clusters, n_loc
+        var = (torch.clamp(torch.norm((input - c_means), self.norm, 0) -
                            self.delta_var, min=0) ** 2) * target
 
-        var_term = 0
-        for i in range(bs):
-            # n_clusters, n_loc
-            var_sample = var[i, :n_clusters[i]]
-            # n_clusters, n_loc
-            target_sample = target[i, :n_clusters[i]]
-
-            # n_clusters
-            c_var = var_sample.sum(1) / target_sample.sum(1)
-            var_term += c_var.sum() / n_clusters[i]
-        var_term /= bs
+        # n_clusters
+        c_var = var.sum(1) / target.sum(1)
+        var_term = c_var.sum() / n_clusters
 
         return var_term
 
-    def _distance_term(self, c_means, n_clusters):
-        bs, n_features, max_n_clusters = c_means.size()
+    def _distance_term(self, c_means):
+        n_features, n_clusters = c_means.size()
 
-        dist_term = 0
-        for i in range(bs):
-            if n_clusters[i] <= 1:
-                continue
+        # n_features, n_clusters, n_clusters
+        means_a = c_means.unsqueeze(2).expand(n_features, n_clusters, n_clusters)
+        means_b = means_a.permute(0, 2, 1)
+        diff = means_a - means_b
 
-            # n_features, n_clusters
-            mean_sample = c_means[i, :, :n_clusters[i]]
-
-            # n_features, n_clusters, n_clusters
-            means_a = mean_sample.unsqueeze(2).expand(n_features, n_clusters[i], n_clusters[i])
-            means_b = means_a.permute(0, 2, 1)
-            diff = means_a - means_b
-
-            margin = 2 * self.delta_dist * (1.0 - torch.eye(n_clusters[i]))
-            margin = Variable(margin)
-            if self.usegpu:
-                margin = margin.cuda()
-            c_dist = torch.sum(torch.clamp(margin - torch.norm(diff, self.norm, 0), min=0) ** 2)
-            dist_term += c_dist / (2 * n_clusters[i] * (n_clusters[i] - 1))
-        dist_term /= bs
+        margin = 2 * self.delta_dist * (1.0 - torch.eye(n_clusters))
+        margin = Variable(margin)
+        if self.usegpu:
+            margin = margin.cuda()
+        c_dist = torch.sum(torch.clamp(margin - torch.norm(diff, self.norm, 0), min=0) ** 2)
+        dist_term = c_dist / (2 * n_clusters * (n_clusters - 1))
 
         return dist_term
 
-    def _regularization_term(self, c_means, n_clusters):
-        bs, n_features, max_n_clusters = c_means.size()
-
-        reg_term = 0
-        for i in range(bs):
-            # n_features, n_clusters
-            mean_sample = c_means[i, :, :n_clusters[i]]
-            reg_term += torch.mean(torch.norm(mean_sample, self.norm, 0))
-        reg_term /= bs
-
+    def _regularization_term(self, c_means):
+        n_features, n_clusters = c_means.size()
+        reg_term = torch.mean(torch.norm(c_means, self.norm, 0))
         return reg_term

@@ -1,5 +1,7 @@
 [general]
 seed = 1234
+logging = 10
+debug = true
 
 [path]
 worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset_debug'
@@ -14,3 +16,4 @@ lr_drop_patience = 2
 [data]
 patch_size = [32, 32, 32]
 n_worker = 1
+n_consistent_worms = 1

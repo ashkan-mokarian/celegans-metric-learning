@@ -1,0 +1,4 @@
+name = 'one_consistant'
+
+[data]
+n_consistent_worms = 1  # only implemented for 1 and 2
