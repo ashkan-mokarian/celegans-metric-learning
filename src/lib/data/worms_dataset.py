@@ -93,7 +93,10 @@ class WormsDataset(IterableDataset):
 
                     raws.append(raw)
                     seghyps.append(seghyp)
-                    unique_patch_labels.append(np.delete(np.unique(seghyp), 0))
+                    ul = np.unique(seghyp).tolist()
+                    if 0 in ul:
+                        ul.remove(0)
+                    unique_patch_labels.append(np.array(ul))
 
                 # get a relabeling list based on cpm dataset, showing label mappings for every label in unique labels
                 max_l, relabel_map_list = self._get_relabel_map(unique_patch_labels, wuids)
@@ -102,9 +105,12 @@ class WormsDataset(IterableDataset):
                     continue
 
                 # now we can relabel seghyp labels based on relabel_map_list
-                for relabel_map, original_label, seghyp in zip(relabel_map_list, unique_patch_labels, seghyps):
+                tmp_seghyps = [np.zeros_like(seghyp) for seghyp in seghyps]
+                for i, (relabel_map, original_label, seghyp) in enumerate(zip(relabel_map_list, unique_patch_labels,
+                                                                         seghyps)):
                     for relabel, original_l in zip(relabel_map, original_label):
-                        seghyp[seghyp==original_l] = relabel
+                        tmp_seghyps[i][seghyp==original_l] = relabel
+                seghyps = tmp_seghyps
 
                 # Add channel dimension to raw data
                 for i, raw in enumerate(raws):
@@ -129,7 +135,10 @@ class WormsDataset(IterableDataset):
                 #  to make use of larger patch sizes
                 tmp_seghyps = [np.zeros((max_l,) + seghyps[0].shape) for _ in seghyps]
                 for i, seghyp in enumerate(seghyps):
-                    unique_labels = np.delete(np.unique(seghyp), 0)
+                    ul = np.unique(seghyp).tolist()
+                    if 0 in ul:
+                        ul.remove(0)
+                    unique_labels = np.array(ul)
                     for l in unique_labels:
                         tmp_seghyps[i][l-1, seghyp==l] = 1
 
@@ -176,7 +185,6 @@ class WormsDataset(IterableDataset):
         compact_list_to_sort = sorted(compact_list_to_sort)
         wuids, unique_patch_labels, reorder_idxs = zip(*compact_list_to_sort)
 
-        max_l = 0
         relabel_map_list = [[0] * len(l) for l in unique_patch_labels]  # by initializing to 0 values, any label
         # not relabeled will be deleted
 
@@ -279,10 +287,10 @@ class OneWormDatasetOverSeghypCenters(Dataset):
         self.use_coord = use_coord
         self.normalize = normalize
         with h5py.File(self.worm_data, 'r') as f:
-            self.raw = f['volumes/raw'][()]
-            self.seghyp = f['volumes/nuclei_seghyp'][()]
+            self.raw = f['volumes/raw'][()].astype('float')
+            self.seghyp = f['volumes/nuclei_seghyp'][()].astype('int')
             self.con_seghyp = f['matrix/con_seghyp'][()]
-            self.gt_label = f['volumes/gt_nuclei_labels'][()]
+            self.gt_label = f['volumes/gt_nuclei_labels'][()].astype('int')
         self.full_size = self.raw.shape
 
     def __len__(self):
@@ -311,12 +319,11 @@ class OneWormDatasetOverSeghypCenters(Dataset):
             xyz_coords = np.vstack(xyz_coords)
             raw = np.vstack([raw, xyz_coords])
         if self.normalize:
-            if self.normalize:
-                raw[0] /= 255.0
-                if self.use_coord:
-                    raw[1] = (raw[1] - 70.0) / 70.0
-                    raw[2] = (raw[2] - 70.0) / 70.0
-                    raw[3] = (raw[3] - 583.0) / 583.0
+            raw[0] /= 255.0
+            if self.use_coord:
+                raw[1] = (raw[1] - 70.0) / 70.0
+                raw[2] = (raw[2] - 70.0) / 70.0
+                raw[3] = (raw[3] - 583.0) / 583.0
         masktmp = self.seghyp[patch]
         mask = np.zeros_like(masktmp)
         mask[masktmp==idx] = 1
@@ -331,5 +338,5 @@ class OneWormDatasetOverSeghypCenters(Dataset):
                   'raw': raw,
                   'mask': mask,
                   'gt_label_id': gt_label_id}
-        sample = {k: torch.from_numpy(v.astype(np.int16)) for k, v in sample.items()}
+        sample = {k: torch.from_numpy(v) for k, v in sample.items()}
         return sample
