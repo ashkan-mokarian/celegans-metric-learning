@@ -1,16 +1,18 @@
-# TODO: change args, with name you can adjust experiemtn name similar to train.py, with m, only model names can be given
-
 import argparse
 import logging
+import re
+
 import os
 import random
 import numpy as np
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 import _init_paths
+
 # from data.siamese_worms_dataset import SiameseWormsDataset
-from lib.data.siamese_worms_dataset import WormsDatasetOverSeghypCenters
-from lib.models.siamese_pixelwise_model import SiamesePixelwiseModel
+from lib.data.worms_dataset import WormsDatasetOverSeghypCenters
+from lib.models.pixelwise_model import PixelwiseModel
 from settings import Settings, DefaultPath
 
 logger = logging.getLogger(__name__)
@@ -34,33 +36,33 @@ def get_args():
 
 def main(args):
     # cluster settings
-    cs = Settings(args.config)
+    sett = Settings(args.config)
     DEFAULT_PATH = DefaultPath()
-    if not cs.PATH.EXPERIMENT_ROOT:
-        cs.PATH.EXPERIMENT_ROOT = DEFAULT_PATH.EXPERIMENTS
-    if not cs.PATH.WORMS_DATASET:
-        cs.PATH.WORMS_DATASET = DEFAULT_PATH.WORMS_DATASET
-    if not cs.PATH.CPM_DATASET:
-        cs.PATH.CPM_DATASET = DEFAULT_PATH.CPM_DATASET
+    if not sett.PATH.EXPERIMENT_ROOT:
+        sett.PATH.EXPERIMENT_ROOT = DEFAULT_PATH.EXPERIMENTS
+    if not sett.PATH.WORMS_DATASET:
+        sett.PATH.WORMS_DATASET = DEFAULT_PATH.WORMS_DATASET
+    if not sett.PATH.CPM_DATASET:
+        sett.PATH.CPM_DATASET = DEFAULT_PATH.CPM_DATASET
 
-    experiment_root = os.path.join(cs.PATH.EXPERIMENT_ROOT, cs.NAME)
+    experiment_root = os.path.join(sett.PATH.EXPERIMENT_ROOT, sett.NAME)
 
     # set logger
     logging.basicConfig(
         format='%(name)s:%(levelname)s [%(asctime)s]: %(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
-        level=cs.GENERAL.LOGGING,
+        level=sett.GENERAL.LOGGING,
         handlers=[
-            logging.FileHandler(os.path.join(experiment_root, 'cluster_log.txt')),
+            logging.FileHandler(os.path.join(experiment_root, 'cluster.log')),
             logging.StreamHandler()
             ]
         )
 
     # Load seeds
-    if cs.GENERAL.SEED:
-        random.seed(cs.GENERAL.SEED)
-        np.random.seed(cs.GENERAL.SEED)
-        torch.manual_seed(cs.GENERAL.SEED)
+    if sett.GENERAL.SEED:
+        random.seed(sett.GENERAL.SEED)
+        np.random.seed(sett.GENERAL.SEED)
+        torch.manual_seed(sett.GENERAL.SEED)
 
 
     model_pth_list = []
@@ -85,26 +87,42 @@ def main(args):
         model_pth_list_tmp = [f for f in model_pth_list if f.split('/')[-1].startswith('bestmodel')]
         model_pth_list = model_pth_list_tmp
 
+    # First sort them to not get the zigzag plots in tensorboard
+    p = re.compile(r'.+-step=(\d+).+')
+    model_step_list = [int(p.search(m.split('/')[-1]).group(1)) for m in model_pth_list]
+    model_step_list, model_pth_list = zip(*sorted(zip(model_step_list, model_pth_list)))
+
     logger.info(f'Clustering for [{len(model_pth_list)}] models:')
     for f in model_pth_list:
         logger.info(f'--- {f}')
 
+    tb_logs_dir = os.path.join(experiment_root, 'tblogs')
+    os.makedirs(tb_logs_dir, exist_ok=True)
+    tb_writer = SummaryWriter(log_dir=tb_logs_dir)
+
     # ==========================
     # Now run clustering for every model in model_pth_list and save clustering centers next to .pth model with
-    # .cluster.npy
-    test_loader = WormsDatasetOverSeghypCenters(cs.PATH.WORMS_DATASET, patch_size=cs.DATA.PATCH_SIZE)
+    # .cluster.joblib
+    test_loader = WormsDatasetOverSeghypCenters(
+        sett.PATH.WORMS_DATASET,
+        patch_size=sett.DATA.PATCH_SIZE,
+        use_coord=sett.DATA.USE_COORD,
+        normalize=sett.DATA.NORMALIZE)
     # test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, num_workers=1)
-    for model_pth in model_pth_list:
+    for i, model_pth in enumerate(model_pth_list):
         model_name = '.'.join(model_pth.split('/')[-1].split('.')[:-1])
         model_path = os.path.join(*model_pth.split('/')[:-1])
-        step = int(model_name.split('step=')[-1].split('-')[0].split('.')[0])
+        step = model_step_list[i]
         cluster_save_file = os.path.join('/', model_path, model_name + '.cluster.joblib')
 
-        model = SiamesePixelwiseModel(cs.MODEL.MODEL_NAME, cs.MODEL.MODEL_PARAMS,
-                                  load_model_path=model_pth)
-        logger.info(f'Start Clustering. n_cluster=[{cs.TRAIN.N_CLUSTER}]')
-        cluster_centers = model.compute_cluster_centers(cs.TRAIN.N_CLUSTER, test_loader, cluster_save_file,
-                                                        num_workers=cs.DATA.N_WORKER, tb_writer=None)
+        model = PixelwiseModel(sett.MODEL.MODEL_NAME, sett.MODEL.MODEL_PARAMS,
+                               load_model_path=model_pth)
+        logger.info(f'Start Clustering. n_cluster=[{sett.TRAIN.N_CLUSTER}]')
+        save_embedding_image_file_path = os.path.join(experiment_root, 'output', 'plots',
+                                                      model_name+'-cluster_embedding')
+        cluster_centers = model.compute_cluster_centers(sett.TRAIN.N_CLUSTER, test_loader, cluster_save_file,
+                                                        num_workers=sett.DATA.N_WORKER, tb_writer=tb_writer,
+                                                        save_embedding_image_file_path=save_embedding_image_file_path)
 
 
 if __name__ == '__main__':

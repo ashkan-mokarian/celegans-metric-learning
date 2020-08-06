@@ -37,8 +37,6 @@ def get_settings():
     sett = Settings(args.config)
     if args.name:
         sett.NAME = args.name
-    if args.debug or sett.GENERAL.DEBUG:
-        sett.read_confs('train_debug')
     if args.load_last:
         sett.MODEL.INIT_MODEL_LAST = True
     if args.load_best:
@@ -111,7 +109,10 @@ def main():
         use_leftout_labels=sett.DATA.USE_LEFTOUT_LABELS,
         use_coord=sett.DATA.USE_COORD,
         normalize=sett.DATA.NORMALIZE,
-        augmentation=sett.TRAIN.AUGMENTATION)
+        augmentation=sett.TRAIN.AUGMENTATION,
+        transforms=None,
+        train=True,
+        debug=sett.GENERAL.DEBUG)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, shuffle=False,
                                                num_workers=sett.DATA.N_WORKER)
 

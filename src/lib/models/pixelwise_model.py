@@ -8,8 +8,14 @@ import torchsummary
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn import metrics
+from sklearn.manifold import TSNE
 from scipy.optimize import linear_sum_assignment
 from joblib import dump, load
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pylab as plt
+import plotly.offline as plotlyoff
+import plotly.graph_objs as plotlygo
 
 from lib.modules.unet import UNet
 from lib.modules.discriminative_loss import DiscriminativeLoss
@@ -99,6 +105,11 @@ class PixelwiseModel:
 
         loss, l_var, l_dist, l_reg = criterion(out, label)
         assert not torch.isnan(loss), 'Why is loss NaN sometimes?'
+        if loss.item() > 100:
+            # logger.debug(f'Loss greater than 100: worm_fn=[{input["worm_fn"]}] - corner=[{input["corner"]}] - '
+            #              f'n_cluster=[{input["n_cluster"]}]')
+            logger.debug('SKIPPING TRAINING - NOT TRAINING FOR THIS STEP BECAUSE LOSS TOO LARGE')
+            return loss, l_var, l_dist, l_reg
 
         loss.backward()
         optimizer.step()
@@ -175,91 +186,143 @@ class PixelwiseModel:
                 )
         return output_list
 
-    def compute_cluster_centers(self, n_cluster, data_loader, cluster_save_file=None, num_workers=1, tb_writer=None):
+    def compute_cluster_centers(self, n_cluster, data_loader, cluster_save_file=None, num_workers=1, tb_writer=None,
+                                save_embedding_image_file_path=None):
         all_avg_embeddings_per_seghyp = []
+        all_gt_labels = []
         self.model.eval()
         for n_worm, worm_dataset in enumerate(data_loader):
             logger.info(f'worm: {n_worm+1}/{len(data_loader)} - n_seghyp={len(worm_dataset)}')
             worm_loader = torch.utils.data.DataLoader(worm_dataset, shuffle=False, num_workers=num_workers)
             for n_seghyp, seghyp in enumerate(worm_loader):
+                # TODO: added last secondinsh, check if keep or remove
+                if torch.any(seghyp['mask']==-1):
+                    logger.debug('Skipped successfully by checking -1 in mask - n-seghyp was {}'.format(n_seghyp))
+                    continue
                 with torch.no_grad():
                     raw = seghyp['raw'].float().cuda()
                     mask = seghyp['mask'].float().cuda()
+                    gt_label_id = seghyp['gt_label_id'].cuda()
 
-                    batched_embedding = self.model.get_embedding(raw)
+                    batched_embedding = self.model(raw)
                     batched_avg_embedding = self.get_avg_embedding_over_mask(batched_embedding, mask)
                     all_avg_embeddings_per_seghyp.extend(
                         [avg_embd.cpu().numpy() for avg_embd in batched_avg_embedding])
+                    all_gt_labels.extend(list(gt_label_id.cpu().numpy()))
 
         all_avg_embeddings_per_seghyp = np.vstack(all_avg_embeddings_per_seghyp)
+        all_gt_labels = np.squeeze(np.vstack(all_gt_labels))
 
         kmeans = KMeans(n_clusters=n_cluster).fit(all_avg_embeddings_per_seghyp)
         logger.info(f'Save scipy.cluster.KMeans model at: [{cluster_save_file}]')
         os.makedirs(os.path.dirname(cluster_save_file), exist_ok=True)
         dump(kmeans, cluster_save_file)
+
+        # plot t-sne embeddings. plot seaborn to tb_write and plotly (mybe even 3d) to saved image
+        if tb_writer or save_embedding_image_file_path:
+            r_clist = np.random.rand(559, 3)
+            r_clist[0] = [0, 0, 0]
+            cluster_centers = kmeans.cluster_centers_
+
+        if tb_writer:
+            tsne = TSNE(n_components=2)
+            tsne_results = tsne.fit_transform(all_avg_embeddings_per_seghyp)
+            fig = plt.figure()
+
+            for i in range(559):
+                selected_gt_labels = np.where(all_gt_labels==i)
+                plt.scatter(x=tsne_results[selected_gt_labels,0], y=tsne_results[selected_gt_labels,1],
+                            c=np.expand_dims(r_clist[i], axis=0),
+                            s=40, alpha=0.5)
+            tsne_cluster_centers = tsne.fit_transform(cluster_centers)
+            plt.scatter(x=tsne_cluster_centers[:,0], y=tsne_cluster_centers[:,1], s=80, alpha=0.4)
+            tb_writer.add_figure('avg_seghyp_embdd-TSNE', fig, global_step=self.step)
+        if save_embedding_image_file_path:
+            r_clist *= 255
+            os.makedirs(os.path.dirname(save_embedding_image_file_path), exist_ok=True)
+            tsne = TSNE(n_components=3)
+            tsne_results = tsne.fit_transform(all_avg_embeddings_per_seghyp)
+            tsne_cluster_centers = tsne.fit_transform(cluster_centers)
+            trace_data = []
+            trace_data.append(plotlygo.Scatter3d(
+                x=tsne_results[:, 0],
+                y=tsne_results[:, 1],
+                z=tsne_results[:, 2],
+                mode='markers',
+                showlegend=False,
+                hovertext=all_gt_labels.astype(str),
+                marker=dict(
+                    size=5,
+                    color=[f'rgb({r_clist[i][0]},{r_clist[i][1]},{r_clist[i][2]})' for i in all_gt_labels],
+                    # color=all_gt_labels.astype(str),
+                    # showscale=False,
+                    # line=dict(
+                    #     width=2,
+                    #     color='rgb(255, 255, 255)'
+                    #     ),
+                    opacity=0.8
+                    )
+                ))
+            trace_data.append(
+                plotlygo.Scatter3d(
+                    x=tsne_cluster_centers[:,0],
+                    y=tsne_cluster_centers[:,1],
+                    z=tsne_cluster_centers[:,2],
+                    mode='markers',
+                    showlegend=False,
+                    marker=dict(
+                        size=10,
+                        color='black',
+                        opacity=0.4
+                        )
+                    )
+                )
+            data = trace_data
+            layout = dict(title=f'avg_seghyp_embd - step={self.step}',
+                          hovermode='closest',
+                          yaxis=dict(zeroline=False),
+                          xaxis=dict(zeroline=False),
+                          showlegend=True
+                          )
+
+            fig = dict(data=data, layout=layout)
+            plotlyoff.plot(fig, filename=save_embedding_image_file_path, auto_open=False)
+
         return kmeans
 
-    def evaluate(self, data_loader, cluster_save_file, num_workers=1, tb_writer=None):
-        scipy_kmeans_model = load(cluster_save_file)
-        print(scipy_kmeans_model.__dict__)
-        predicted_cluster_labels_list = [[] for _ in range(scipy_kmeans_model.n_clusters)]
+    def predict(self, oneworm_dataset_over_seghypcenters, cluster_load_file, num_workers=1):
+        scipy_kmeans_model = load(cluster_load_file)
+
+        predicted_seghyplabel_to_cluster_dict = {}
+        seghyplabel_to_gtlabel_dict = {}
+        gt_labels = []
+        seghyp_labels = []  # this basically keeps index values for the other lists, since we are skipping some values
+        avg_embeddings_per_seghyp = []
 
         self.model.eval()
-        for n_worm, worm_dataset in enumerate(data_loader):
-            logger.info(f'worm: {n_worm + 1}/{len(data_loader)} - n_seghyp={len(worm_dataset)}')
-            worm_loader = torch.utils.data.DataLoader(worm_dataset, shuffle=False, num_workers=num_workers)
-            gt_labels = []
-            all_avg_embeddings_per_seghyp_per_worm = []
-            for n_seghyp, seghyp in enumerate(worm_loader):
-                with torch.no_grad():
-                    raw = seghyp['raw'].float().cuda()
-                    mask = seghyp['mask'].float().cuda()
-                    gt_labels.extend(list(seghyp['gt_label_id'].cpu().numpy()))
+        data_loader = torch.utils.data.DataLoader(oneworm_dataset_over_seghypcenters, shuffle=False, num_workers=num_workers)
+        for n_seghyp, seghyp in enumerate(data_loader):
+            if torch.any(seghyp['mask'] == -1):  # Bcuz worm18 for 4 con-seghyps behaves bad
+                logger.debug('Skipped successfully by checking -1 in mask - n-seghyp was {}'.format(n_seghyp))
+                continue
+            with torch.no_grad():
+                raw = seghyp['raw'].float().cuda()
+                mask = seghyp['mask'].float().cuda()
+                gt_labels.extend(list(seghyp['gt_label_id'].cpu().numpy()))
+                seghyp_labels.append(n_seghyp+1)  # TODO: this only supports batches of 1 for prediction
 
-                    batched_embedding = self.model.get_embedding(raw)
-                    batched_avg_embedding = self.get_avg_embedding_over_mask(batched_embedding, mask)
-                    all_avg_embeddings_per_seghyp_per_worm.extend(
-                        [avg_embd.cpu().numpy() for avg_embd in batched_avg_embedding])
+                batched_embedding = self.model(raw)
+                batched_avg_embedding = self.get_avg_embedding_over_mask(batched_embedding, mask)
+                avg_embeddings_per_seghyp.extend(
+                    [avg_embd.cpu().numpy() for avg_embd in batched_avg_embedding])
 
-            # Compute distances and run hungarian
-            all_avg_embeddings_per_seghyp_per_worm = np.vstack(all_avg_embeddings_per_seghyp_per_worm)
-            distance_matrix = scipy_kmeans_model.transform(all_avg_embeddings_per_seghyp_per_worm)
-            cluster_assignments = linear_sum_assignment(distance_matrix)
-            for row_ind, col_ind in zip(*cluster_assignments):
-                predicted_cluster_labels_list[col_ind].append(gt_labels[row_ind])
-            logger.info(predicted_cluster_labels_list)
-
-        # some changes to make use of sklearn metrics
-        labels_true = []
-        labels_pred = []
-        # leave the ones with gt 0 labels
-        for i, pred_cluster in enumerate(predicted_cluster_labels_list):
-            for gt_label in pred_cluster:
-                if gt_label != 0:
-                    labels_pred.append(i)
-                    labels_true.append(gt_label)
-        # now calcualte bunch of metrics
-        ari = metrics.adjusted_rand_score(labels_true, labels_pred)
-        tb_writer.add_scalar('evaluation/adjusted_rand_index', ari, self.step)
-
-        nmi = metrics.normalized_mutual_info_score(labels_true, labels_pred)
-        tb_writer.add_scalar('evaluation/normalized_mutual_information', nmi, self.step)
-
-        homogenity, completeness, v_measure = metrics.homogeneity_completeness_v_measure(labels_true, labels_pred)
-        tb_writer.add_scalar('evaluation/homogenity', homogenity, self.step)
-        tb_writer.add_scalar('evaluation/completeness', completeness, self.step)
-        tb_writer.add_scalar('evaluation/v_measure', v_measure, self.step)
-
-        fowlkes_mallows_score = metrics.fowlkes_mallows_score(labels_true, labels_pred)
-        tb_writer.add_scalar('evaluation/fowlkes_mallows_score', fowlkes_mallows_score, self.step)
-
-        logger.info(f"Evaluation Metrics:\n"
-                    f"===================\n"
-                    f"adjusted rand index:   {ari}\n"
-                    f"normalized mutual inf: {nmi}\n"
-                    f"homogenity:            {homogenity}\n"
-                    f"completeness:          {completeness}\n"
-                    f"v_measure:             {v_measure}\n"
-                    f"fowlkes_mallows_score: {fowlkes_mallows_score}")
-
-        return predicted_cluster_labels_list
+        # Compute distances and run hungarian
+        avg_embeddings_per_seghyp = np.vstack(avg_embeddings_per_seghyp)
+        distance_matrix = scipy_kmeans_model.transform(avg_embeddings_per_seghyp)
+        cluster_assignments = linear_sum_assignment(distance_matrix)
+        for row_ind, col_ind in zip(*cluster_assignments):
+            predicted_seghyplabel_to_cluster_dict.update({seghyp_labels[row_ind]: col_ind+1})
+        # This is not required for prediction, but just returning it for easier evaluations
+        for sl, gl in zip(seghyp_labels, gt_labels):
+            seghyplabel_to_gtlabel_dict.update({sl:gl})
+        return predicted_seghyplabel_to_cluster_dict, seghyplabel_to_gtlabel_dict

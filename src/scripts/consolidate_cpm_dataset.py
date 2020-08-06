@@ -168,6 +168,37 @@ def main(config):
             pickle.dump(w2w_cpm, f)
 
 
+def helper_get_pm_and_acc(i, j):
+    solfile_root = os.path.abspath(
+        os.path.join(DEFAULT_PATH.DATA,
+                     'raw',
+                     '2020-07-22_w2w-solutions_3xLAP_1xTKR1000_Fusion')
+        )
+    solfile_name_pattern = 'worm{:02}-worm{:02}.txt'.format(i,j)
+    solfile = os.path.join(solfile_root, solfile_name_pattern)
+    worms = lib.data.worms.Worms(DEFAULT_PATH.WORM_NAMES)
+    ulabels_fn = os.path.abspath(
+        os.path.join(DEFAULT_PATH.DATA, 'raw', '30WormsImagesGroundTruthSeg', 'universe.txt')
+        )
+    ulabels = lib.data.labels.Labels(ulabels_fn)
+    raw_worms_dataset_root = os.path.abspath(
+        os.path.join(DEFAULT_PATH.DATA, 'raw', '30WormsImagesGroundTruthSeg', )
+        )
+    seghypnames_fn = os.path.join(raw_worms_dataset_root, 'groundTruthInstanceSeg',
+                                  '{}.ano.curated.aligned.txt')
+    w1name = worms.uid_to_name(i)
+    w2name = worms.uid_to_name(j)
+
+    tmp_w1_w2_pm = read_pm_sol_listfrmt(solfile)
+    w1_w2_pm = {k + 1: v + 1 for k, v in tmp_w1_w2_pm.items()}
+
+    w1_seghyplnames = read_seghyp_names(seghypnames_fn.format(w1name))
+    w2_seghyplnames = read_seghyp_names(seghypnames_fn.format(w2name))
+
+    acc = get_correct_matches(w1_w2_pm, w1_seghyplnames, w2_seghyplnames, ulabels)
+
+    return w1_w2_pm, acc
+
 if __name__ == '__main__':
     config = get_config_arguments()
     main(config)

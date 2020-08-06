@@ -330,7 +330,9 @@ class OneWormDatasetOverSeghypCenters(Dataset):
         gt_label = self.gt_label[patch]
         gt_label_ids = gt_label[mask==1]
         if len(gt_label_ids)==0:
-            print('ooooops')
+            # TODO: clean the dataset for worm18 to not have this
+            logger.info(f'Skipped loading con-seghyp with index:[{idx}], worm_name:[{self.worm_data}]')
+            return {'mask': torch.from_numpy(np.array([-1]))}
         gt_label_id = gt_label_ids[0]
         assert np.all(gt_label_ids == gt_label_id)
         gt_label_id = np.array(gt_label_id)
