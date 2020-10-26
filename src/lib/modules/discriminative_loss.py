@@ -54,14 +54,18 @@ class DiscriminativeLoss(_Loss):
         n_features, n_loc = input.size()
         n_clusters = target.size(0)
         # n_features, n_clusters, n_loc
-        input = input.unsqueeze(1).expand(n_features, n_clusters, n_loc)
+        #input = input.unsqueeze(1).expand(n_features, n_clusters, n_loc)
         # 1, n_clusters, n_loc
-        target = target.unsqueeze(0)
+        #target = target.unsqueeze(0)
         # n_features, n_clusters, n_loc
-        input = input * target
+        #input = input * target
 
         # n_features, n_cluster
-        mean = input.sum(2) / target.sum(2)
+        #mean = input.sum(2) / target.sum(2)
+
+        count = target.sum(1)
+        sum = input @ target.transpose(0,1)
+        mean = torch.true_divide(sum, count)
 
         return mean
 
@@ -77,6 +81,7 @@ class DiscriminativeLoss(_Loss):
                            self.delta_var, min=0) ** 2) * target
 
         # n_clusters
+        # print('var_sum',var.sum(1),'target_sum', target.sum(1))
         c_var = var.sum(1) / target.sum(1)
         var_term = c_var.sum() / n_clusters
 

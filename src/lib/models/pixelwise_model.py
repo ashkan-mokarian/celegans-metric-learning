@@ -18,7 +18,10 @@ import plotly.offline as plotlyoff
 import plotly.graph_objs as plotlygo
 
 from lib.modules.unet import UNet
+
 from lib.modules.discriminative_loss import DiscriminativeLoss
+# from lib.modules.discriminative_loss_withforloop import DiscriminativeLoss
+
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +101,9 @@ class PixelwiseModel:
 
     def _train_one_iteration(self, input, criterion, optimizer):
         raw = input['raw'].float().cuda()
-        label = input['label'].cuda()
+        label = input['label'].float().cuda()
+
+        logger.debug('N_CLUSTER: ' + str(label.size(1)))
 
         optimizer.zero_grad()
         out = self.model(raw)

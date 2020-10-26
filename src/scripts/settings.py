@@ -88,6 +88,8 @@ class General(BaseSettings):
         self.OVERWRITE = False
         self.DEBUG = False
         self.SEED = None
+        self.GPU_DEBUG = None
+        self.GPU_DEBUG_TRACE_INTO = None
 
 
 class Model(BaseSettings):

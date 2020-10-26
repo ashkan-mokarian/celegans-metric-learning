@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 import random
 import numpy as np
 import torch
@@ -13,6 +14,8 @@ from settings import Settings, DefaultPath
 from lib.utils.general import generate_run_id
 from lib.data.worms_dataset import WormsDataset
 from lib.models.pixelwise_model import PixelwiseModel
+
+from lib.utils.gpu_profile import trace_calls, set_gpu_profile_fn
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,14 @@ def main():
             logging.StreamHandler()
             ]
         )
+
+    # gpu mem debug
+    if sett.GENERAL.GPU_DEBUG:
+        set_gpu_profile_fn(experiment_root)
+        os.environ["GPU_DEBUG"] = sett.GENERAL.GPU_DEBUG
+        os.environ['TRACE_INTO'] = sett.GENERAL.GPU_DEBUG_TRACE_INTO
+        sys.settrace(trace_calls)
+
 
     # Load seeds
     random.seed(sett.GENERAL.SEED)
