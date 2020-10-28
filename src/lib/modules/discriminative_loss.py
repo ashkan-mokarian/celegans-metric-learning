@@ -46,8 +46,6 @@ class DiscriminativeLoss(_Loss):
         l_reg = self._regularization_term(c_means)
         loss = self.alpha * l_var + self.beta * l_dist + self.gamma * l_reg
 
-        logger.debug(f'l_var:[{l_var}], l_dist:[{l_dist}], l_reg:[{l_reg}], loss:[{loss}]')
-
         return loss, l_var, l_dist, l_reg
 
     def _cluster_means(self, input, target):

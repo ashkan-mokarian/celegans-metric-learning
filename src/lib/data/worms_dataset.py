@@ -32,7 +32,8 @@ class WormsDataset(IterableDataset):
                  augmentation=None,
                  transforms=None,
                  train=True,
-                 debug=False):
+                 debug=False,
+                 max_ninstance=None):
         super(WormsDataset).__init__()
 
         self.worms_data = glob.glob(os.path.join(worms_dataset_root, "*.hdf"))
@@ -47,6 +48,7 @@ class WormsDataset(IterableDataset):
         self.normalize = normalize
         self.augmentation = augmentation
         self.debug = debug
+        self.max_ninstance = max_ninstance
         # Calculate the valid range of lower left 3d corner to sample for a given patch size
         self.MAX_SAMPLE_X = 140 - self.patch_size[0]
         self.MAX_SAMPLE_Y = 140 - self.patch_size[1]
@@ -143,6 +145,19 @@ class WormsDataset(IterableDataset):
                         tmp_seghyps[i][l-1, seghyp==l] = 1
 
                 seghyps = tmp_seghyps
+
+                # Disc loss especially for very large n_instance cases, throws GPU OOM Error. While there has been
+                # some improvements for Disc loss, it still remains an issue for larger n_instance sizes. E.g. for
+                # patch size of [64, 64, 64], it throws OOM error for n_instance 140. However, it does not for 120.
+                # Still havn't done an extensive study of the exact n_instance number, but use max_ninstance
+                # parameter to randomely select max_ninstance number if it has more.
+                if self.max_ninstance and self.max_ninstance != 0 and max_l > self.max_ninstance:
+                    # for this, randomely select max_ninstance of [0, max_l - 1] and only take those rows
+                    logger.debug(f'Clipping input seghyp data from original:[{max_l}] n_instances to [{self.max_ninstance}]')
+                    selected_rows = np.random.choice(max_l, self.max_ninstance, replace=False)
+                    for i, seghyp in enumerate(seghyps):
+                        seghyps[i] = seghyp[selected_rows, :]
+                    max_l = self.max_ninstance
 
                 # Create batch dimensions from the lists
                 for i, (raw, seghyp) in enumerate(zip(raws, seghyps)):

@@ -123,7 +123,8 @@ def main():
         augmentation=sett.TRAIN.AUGMENTATION,
         transforms=None,
         train=True,
-        debug=sett.GENERAL.DEBUG)
+        debug=sett.GENERAL.DEBUG,
+        max_ninstance=sett.DATA.MAX_NINSTANCE)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, shuffle=False,
                                                num_workers=sett.DATA.N_WORKER)
 

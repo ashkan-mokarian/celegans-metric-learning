@@ -3,7 +3,7 @@ seed = 1234
 logging = 10
 debug = true
 # gpu mem debug
-gpu_debug = '1'
+#gpu_debug = '1'
 gpu_debug_trace_into = "_train_one_iteration fit _discriminative_loss _cluster_means _variance_term _distance_term _regularization_term backward run_backward step"
 
 [path]
@@ -20,3 +20,4 @@ lr_drop_patience = 2
 patch_size = [64, 64, 64]
 n_worker = 1
 n_consistent_worms = 2
+max_ninstance = 50

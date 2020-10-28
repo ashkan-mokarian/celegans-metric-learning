@@ -137,6 +137,7 @@ class Data(BaseSettings):
         self.USE_LEFTOUT_LABELS = None
         self.USE_COORD = None
         self.NORMALIZE = None
+        self.MAX_NINSTANCE = None
 
 
 class Settings(BaseSettings):

@@ -103,16 +103,12 @@ class PixelwiseModel:
         raw = input['raw'].float().cuda()
         label = input['label'].float().cuda()
 
-        logger.debug('N_CLUSTER: ' + str(label.size(1)))
-
         optimizer.zero_grad()
         out = self.model(raw)
 
         loss, l_var, l_dist, l_reg = criterion(out, label)
         assert not torch.isnan(loss), 'Why is loss NaN sometimes?'
         if loss.item() > 100:
-            # logger.debug(f'Loss greater than 100: worm_fn=[{input["worm_fn"]}] - corner=[{input["corner"]}] - '
-            #              f'n_cluster=[{input["n_cluster"]}]')
             logger.debug('SKIPPING TRAINING - NOT TRAINING FOR THIS STEP BECAUSE LOSS TOO LARGE')
             return loss, l_var, l_dist, l_reg
 
