@@ -24,11 +24,12 @@ class WormsDataset(IterableDataset):
     def __init__(self,
                  worms_dataset_root,
                  cpm_dataset,
-                 patch_size,
                  n_consistent_worms,
                  use_leftout_labels,
                  use_coord,
                  normalize,
+                 patch_size,
+                 output_size,
                  augmentation=None,
                  transforms=None,
                  train=True,
@@ -40,7 +41,9 @@ class WormsDataset(IterableDataset):
         with open(cpm_dataset, 'rb') as f:
             self.cpm_data = pickle.load(f)
         self.train = train
-        self.patch_size = patch_size
+        self.patch_size = np.array(patch_size)
+        self.output_size = np.array(output_size)
+
         self.n_consistent_worms = n_consistent_worms
         self.use_leftout_labels = use_leftout_labels
         self.use_coord = use_coord
@@ -49,10 +52,11 @@ class WormsDataset(IterableDataset):
         self.augmentation = augmentation
         self.debug = debug
         self.max_ninstance = max_ninstance
-        # Calculate the valid range of lower left 3d corner to sample for a given patch size
-        self.MAX_SAMPLE_X = 140 - self.patch_size[0]
-        self.MAX_SAMPLE_Y = 140 - self.patch_size[1]
-        self.MAX_SAMPLE_Z = 1166 - self.patch_size[2]
+        # Calculate the valid range of lower left 3d corner to sample for a given output_size. if input patch_size
+        # larger than original, fill with 0s
+        self.MAX_SAMPLE_X = 140 - self.output_size[0]
+        self.MAX_SAMPLE_Y = 140 - self.output_size[1]
+        self.MAX_SAMPLE_Z = 1166 - self.output_size[2]
 
     def __iter__(self):
         """Sample batch_size number of worms, fetch data, do elastic augmentation, relabel them according to cpm,
@@ -62,12 +66,46 @@ class WormsDataset(IterableDataset):
                 sampled_worms = random.sample(self.worms_data, k=self.n_consistent_worms)
 
                 # sample patch corner from valid points
-                corner = (random.randint(0, self.MAX_SAMPLE_X),
+                corner_output = (random.randint(0, self.MAX_SAMPLE_X),
                           random.randint(0, self.MAX_SAMPLE_Y),
                           random.randint(0, self.MAX_SAMPLE_Z))
-                sampled_patch = (slice(corner[0], corner[0] + self.patch_size[0]),
-                                 slice(corner[1], corner[1] + self.patch_size[1]),
-                                 slice(corner[2], corner[2] + self.patch_size[2]))
+                # sampled_patch_output = (slice(corner_output[0], corner_output[0] + self.output_size[0]),
+                #                         slice(corner_output[1], corner_output[1] + self.output_size[1]),
+                #                         slice(corner_output[2], corner_output[2] + self.output_size[2]))
+
+                patch_output_diff = np.array(self.patch_size) - np.array(self.output_size)
+                corner_input = np.array((corner_output[0] - patch_output_diff[0]//2,
+                          corner_output[1] - patch_output_diff[1]//2,
+                          corner_output[2] - patch_output_diff[2]//2))
+                other_corner_input = np.array(list(corner_input[i]+self.patch_size[i] for i in range(
+                    len(self.patch_size))))
+
+                valid_corner_input = np.array(list(corner_input[i] if corner_input[i]>0 else 0 for i in range(len(
+                    corner_input))))
+                outofbound_corner_input = np.array(list(abs(corner_input[i]) if corner_input[i] < 0 else 0 for i in
+                                                            range(len(corner_input))))
+                valid_other_corner_input = np.array([
+                    other_corner_input[0] if other_corner_input[0] < 140 else 140,
+                    other_corner_input[1] if other_corner_input[1] < 140 else 140,
+                    other_corner_input[2] if other_corner_input[2] < 1166 else 1166,
+                    ])
+                sampled_patch_input = (slice(valid_corner_input[0], valid_other_corner_input[0]),
+                                        slice(valid_corner_input[1], valid_other_corner_input[1]),
+                                        slice(valid_corner_input[2], valid_other_corner_input[2]))
+                filled_patch_input = (slice(outofbound_corner_input[0], outofbound_corner_input[
+                    0]+valid_other_corner_input[0] - valid_corner_input[0]),
+                                      slice(outofbound_corner_input[1], outofbound_corner_input[
+                                          1] + valid_other_corner_input[1] - valid_corner_input[1]),
+                                      slice(outofbound_corner_input[2], outofbound_corner_input[
+                                          2] + valid_other_corner_input[2] - valid_corner_input[2]))
+
+                center_ouput_corner = np.array((self.patch_size-self.output_size)//2)
+                center_output_patch_from_input = (slice(center_ouput_corner[0], center_ouput_corner[0]+self.output_size[0]),
+                                                  slice(center_ouput_corner[1], center_ouput_corner[
+                                                      1]+self.output_size[1]),
+                                                  slice(center_ouput_corner[2], center_ouput_corner[
+                                                      2]+self.output_size[2]),)
+
 
                 raws = []
                 original_raws = []
@@ -81,8 +119,15 @@ class WormsDataset(IterableDataset):
                     wuid = int(worm_fn.split('/')[-1].split('.')[0].split('worm')[1])
                     wuids.append(wuid)
                     with h5py.File(worm_fn, 'r') as f:
-                        raw = f['volumes/raw'][()][sampled_patch].astype('float')
-                        seghyp = f['volumes/nuclei_seghyp'][()][sampled_patch].astype('int')
+                        # for input (raw) we need a larger patch than output possibly with 0 padding
+                        raw_ = f['volumes/raw'][()][sampled_patch_input].astype('float')
+                        raw = np.zeros(self.patch_size)
+                        raw[filled_patch_input] = raw_
+                        # Also for seghyps do the same as raw, so that no issues for augmentation, in the end,
+                        # just take the most center patch of size patch_size
+                        seghyp_ = f['volumes/nuclei_seghyp'][()][sampled_patch_input].astype('int')
+                        seghyp = np.zeros(self.patch_size)
+                        seghyp[filled_patch_input] = seghyp_
 
                     if self.debug:
                         original_seghyps.append(np.copy(seghyp))
@@ -92,6 +137,9 @@ class WormsDataset(IterableDataset):
                     #  mybe sth like torchio
                     if self.augmentation:
                         raw, seghyp = self._augment(raw, seghyp)
+
+                    # after augmentation we are good to only take the necessary output patch size
+                    seghyp = seghyp[center_output_patch_from_input]
 
                     raws.append(raw)
                     seghyps.append(seghyp)
@@ -119,9 +167,9 @@ class WormsDataset(IterableDataset):
                     raws[i] = np.expand_dims(raw, axis=0)
                 # Add coord channels to raw data based on corner and patchsize
                 if self.use_coord:
-                    xyz_coords = np.meshgrid(np.arange(start=corner[0], stop=corner[0]+self.patch_size[0]),
-                                             np.arange(start=corner[1], stop=corner[1]+self.patch_size[1]),
-                                             np.arange(start=corner[2], stop=corner[2]+self.patch_size[2]))
+                    xyz_coords = np.meshgrid(np.arange(start=corner_input[0], stop=corner_input[0]+self.patch_size[0]),
+                                             np.arange(start=corner_input[1], stop=corner_input[1]+self.patch_size[1]),
+                                             np.arange(start=corner_input[2], stop=corner_input[2]+self.patch_size[2]))
                     xyz_coords = [np.expand_dims(c, axis=0) for c in xyz_coords]
                     xyz_coords = np.vstack(xyz_coords)
                     for i, raw in enumerate(raws):
@@ -138,6 +186,7 @@ class WormsDataset(IterableDataset):
                 tmp_seghyps = [np.zeros((max_l,) + seghyps[0].shape) for _ in seghyps]
                 for i, seghyp in enumerate(seghyps):
                     ul = np.unique(seghyp).tolist()
+                    ul = [int(uull) for uull in ul]
                     if 0 in ul:
                         ul.remove(0)
                     unique_labels = np.array(ul)
@@ -183,7 +232,7 @@ class WormsDataset(IterableDataset):
                     sample.update({
                         'original_raw': np.vstack([np.expand_dims(a, axis=0) for a in original_raws]),
                         'original_label': np.vstack([np.expand_dims(a, axis=0) for a in original_seghyps]),
-                        'corner': corner,
+                        'corner': corner_input,
                         'worm_fn': worm_fn_list
                         })
                 sample.update({k: torch.from_numpy(v) for k, v in sample.items() if type(v) is np.ndarray})
@@ -274,11 +323,13 @@ class WormsDatasetOverSeghypCenters:
     def __init__(self,
                  worms_dataset_root,
                  patch_size,
+                 output_size,
                  use_coord,
                  normalize):
         # super(WormsDatasetOverSeghypCenters, self).__init__()
         self.worms_data = glob.glob(os.path.join(worms_dataset_root, "*.hdf"))
         self.patch_size = patch_size
+        self.output_size = output_size
         self.use_coord = use_coord
         self.normalize = normalize
 
@@ -287,6 +338,7 @@ class WormsDatasetOverSeghypCenters:
 
     def __getitem__(self, idx):
         return OneWormDatasetOverSeghypCenters(self.worms_data[idx], patch_size=self.patch_size,
+                                               output_size=self.output_size,
                                                use_coord=self.use_coord, normalize=self.normalize)
 
 
@@ -294,11 +346,13 @@ class OneWormDatasetOverSeghypCenters(Dataset):
     def __init__(self,
                  worm_data,
                  patch_size,
+                 output_size,
                  use_coord,
                  normalize):
         super(OneWormDatasetOverSeghypCenters, self).__init__()
         self.worm_data = worm_data
         self.patch_size = np.array(patch_size)
+        self.output_size = np.array(output_size)
         self.use_coord = use_coord
         self.normalize = normalize
         with h5py.File(self.worm_data, 'r') as f:
@@ -314,17 +368,21 @@ class OneWormDatasetOverSeghypCenters(Dataset):
     def __getitem__(self, tmp_idx):
         idx = tmp_idx + 1
         con_idx = np.round(self.con_seghyp[idx]).astype(dtype=np.int)
-        # TODO: maybe do padding insted of this nonesense, or does it make sense?
-        # shift corner slightly so we don't get out-of-bound
-        other_corner_extra = con_idx + self.patch_size//2 - self.full_size
-        other_corner_extra[other_corner_extra<0] = 0
-        corner = con_idx - self.patch_size//2 - other_corner_extra
-        corner[corner < 0] = 0
-        patch = (slice(corner[0], corner[0]+self.patch_size[0]),
-                 slice(corner[1], corner[1]+self.patch_size[1]),
-                 slice(corner[2], corner[2]+self.patch_size[2]))
+        if any(con_idx<-10000) or any(con_idx>10000):
+            # TODO: sometimes for worm18 con_idx has very large negative number, overflow
+            logger.info(f'Skipped loading con-seghyp with index:[{idx}], worm_name:[{self.worm_data}]')
+            return {'mask': torch.from_numpy(np.array([-1]))}
 
-        raw = self.raw[patch]
+        # other_corner_extra = con_idx + self.patch_size//2 - self.full_size
+        # other_corner_extra[other_corner_extra<0] = 0
+        # corner = con_idx - self.patch_size//2 - other_corner_extra
+        # corner[corner < 0] = 0
+        # patch = (slice(corner[0], corner[0]+self.patch_size[0]),
+        #          slice(corner[1], corner[1]+self.patch_size[1]),
+        #          slice(corner[2], corner[2]+self.patch_size[2]))
+
+        raw, corner = extract_0padded_patch(self.patch_size, con_idx, self.raw)
+        # raw = self.raw[patch]
         raw = np.expand_dims(raw, axis=0)  # add channel dim
         if self.use_coord:
             xyz_coords = np.meshgrid(np.arange(start=corner[0], stop=corner[0] + self.patch_size[0]),
@@ -339,16 +397,19 @@ class OneWormDatasetOverSeghypCenters(Dataset):
                 raw[1] = (raw[1] - 70.0) / 70.0
                 raw[2] = (raw[2] - 70.0) / 70.0
                 raw[3] = (raw[3] - 583.0) / 583.0
-        masktmp = self.seghyp[patch]
+
+        masktmp, _ = extract_0padded_patch(self.output_size, con_idx, self.seghyp)
+        # masktmp = self.seghyp[patch]
         mask = np.zeros_like(masktmp)
         mask[masktmp==idx] = 1
-        gt_label = self.gt_label[patch]
+        gt_label,_ = extract_0padded_patch(self.output_size, con_idx, self.gt_label)
+        # gt_label = self.gt_label[patch]
         gt_label_ids = gt_label[mask==1]
         if len(gt_label_ids)==0:
             # TODO: clean the dataset for worm18 to not have this
             logger.info(f'Skipped loading con-seghyp with index:[{idx}], worm_name:[{self.worm_data}]')
             return {'mask': torch.from_numpy(np.array([-1]))}
-        gt_label_id = gt_label_ids[0]
+        gt_label_id = int(gt_label_ids[0])
         assert np.all(gt_label_ids == gt_label_id)
         gt_label_id = np.array(gt_label_id)
         sample = {'patch_reference_corner': corner,
@@ -357,3 +418,34 @@ class OneWormDatasetOverSeghypCenters(Dataset):
                   'gt_label_id': gt_label_id}
         sample = {k: torch.from_numpy(v) for k, v in sample.items()}
         return sample
+
+
+def extract_0padded_patch(shape, con, arr):
+    con = np.array(con)
+    shape = np.array(shape)
+    assert len(con) == 3
+    corner = con - shape//2
+    valid_corner = np.array([corner[i] if corner[i]>=0 else 0 for i in range(len(corner))])
+    other_corner = corner + shape
+    valid_other_corner = np.array(list(other_corner[i] if other_corner[i]<=ll else ll for i, ll in enumerate([140,
+                                                                                                              140,
+                                                                                                              1166])))
+
+    relative_patch = (
+        slice(valid_corner[0]-corner[0], shape[0] - other_corner[0]+valid_other_corner[0]),
+        slice(valid_corner[1] - corner[1], shape[1] - other_corner[1] + valid_other_corner[1]),
+        slice(valid_corner[2] - corner[2], shape[2] - other_corner[2] + valid_other_corner[2]),
+    )
+
+    sampled_patch = (
+        slice(valid_corner[0], valid_other_corner[0]),
+        slice(valid_corner[1], valid_other_corner[1]),
+        slice(valid_corner[2], valid_other_corner[2]),
+    )
+
+    if sampled_patch[0].start > 1000:
+        print('jj')
+    raw = np.zeros(shape)
+    raw[relative_patch] = arr[sampled_patch]
+
+    return raw, corner

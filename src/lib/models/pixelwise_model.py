@@ -31,10 +31,11 @@ class PixelwiseModel:
     def __init__(self,
                  backbone_model_name,
                  backbone_model_params,
+                 padding,
                  load_model_path=None):
 
         if backbone_model_name == 'unet':
-            unet = UNet(*backbone_model_params)
+            unet = UNet(*backbone_model_params, padding=padding)
         else:
             raise NotImplementedError()
         self.model = unet

@@ -20,7 +20,7 @@ from lib.utils.gpu_profile import trace_calls, set_gpu_profile_fn
 logger = logging.getLogger(__name__)
 
 
-def get_settings():
+def get_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-c', '--config', required=True, action='append',
@@ -34,8 +34,14 @@ def get_settings():
                         help='loads last saved model by searching in the experiments saved models')
     parser.add_argument('--load_best', action='store_true',
                         help='loads best saved model by searching in the experiments saved models')
+    parser.add_argument('--append', action='store_true',
+                        help='forces the exact name in the config file to be used without creating on-the-fly run-id '
+                             'name if the experiment already exist. useful for when toml config file is created first in the experiment directory and not in the experiments_cfg')
     args = parser.parse_args()
+    return args
 
+
+def get_settings(args):
     # overwrite .toml settings with CLI settings
     sett = Settings(args.config)
     if args.name:
@@ -59,8 +65,8 @@ def get_settings():
     return sett
 
 
-def main():
-    sett = get_settings()
+def main(args):
+    sett = get_settings(args)
 
     # experiment root
     experiment_root = os.path.join(sett.PATH.EXPERIMENT_ROOT, sett.NAME)
@@ -78,7 +84,7 @@ def main():
         ckpts = [os.path.join(ckpts_root, f) for f in os.listdir(ckpts_root) if f.endswith('.pth')]
         load_model_path = max(ckpts, key=lambda x: int(x.split('-')[-1].split('.')[0]))
         assert os.path.isfile(load_model_path)
-    elif os.path.exists(experiment_root):
+    elif os.path.exists(experiment_root) and not args.append:
         run_id = generate_run_id()
         sett.NAME = sett.NAME + '-' + run_id
         experiment_root = os.path.join(sett.PATH.EXPERIMENT_ROOT, sett.NAME)
@@ -116,6 +122,7 @@ def main():
         sett.PATH.WORMS_DATASET,
         sett.PATH.CPM_DATASET,
         patch_size=sett.DATA.PATCH_SIZE,
+        output_size=sett.DATA.OUTPUT_SIZE,
         n_consistent_worms=sett.DATA.N_CONSISTENT_WORMS,
         use_leftout_labels=sett.DATA.USE_LEFTOUT_LABELS,
         use_coord=sett.DATA.USE_COORD,
@@ -130,6 +137,7 @@ def main():
 
     model = PixelwiseModel(sett.MODEL.MODEL_NAME,
                            sett.MODEL.MODEL_PARAMS,
+                           padding=sett.MODEL.PADDING,
                            load_model_path=load_model_path)
     mock_input = next(iter(train_loader))
     model.print_model_summary(mock_input['raw'])
@@ -147,6 +155,9 @@ def main():
     tb_writer.close()
     logger.info('Finished Training!!!')
 
+    return experiment_root
+
 
 if __name__ == '__main__':
-    main()
+    args = get_args()
+    main(args)

@@ -113,6 +113,7 @@ def main(args):
     # ==========================
     # Now run prediction for every model in model_pth_list and save clustering results
     test_loader = WormsDatasetOverSeghypCenters(sett.PATH.WORMS_DATASET, patch_size=sett.DATA.PATCH_SIZE,
+                                                output_size=sett.DATA.OUTPUT_SIZE,
                                                 use_coord=sett.DATA.USE_COORD, normalize=sett.DATA.NORMALIZE)
     # test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, num_workers=1)
 
@@ -128,6 +129,7 @@ def main(args):
         os.makedirs(os.path.dirname(evaluate_save_file), exist_ok=True)
 
         model = PixelwiseModel(sett.MODEL.MODEL_NAME, sett.MODEL.MODEL_PARAMS,
+                               padding=sett.MODEL.PADDING,
                                load_model_path=model_pth)
         logger.info(f'Start Evaluating for model at step:[{step}] - path:[{model_pth}]')
 

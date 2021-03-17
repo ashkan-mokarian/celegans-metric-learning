@@ -4,20 +4,17 @@ logging = 10
 debug = true
 # gpu mem debug
 #gpu_debug = '1'
-gpu_debug_trace_into = "_train_one_iteration fit _discriminative_loss _cluster_means _variance_term _distance_term _regularization_term backward run_backward step"
+#gpu_debug_trace_into = "_train_one_iteration fit _discriminative_loss _cluster_means _variance_term _distance_term _regularization_term backward run_backward step"
 
 [path]
 worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset_debug'
 
 [train]
-n_step = 10
+n_step = 20
 model_ckpt_every_n_step = 10
 running_loss_interval = 5
-burn_in_step = 15
+burn_in_step = 5
 lr_drop_patience = 2
 
 [data]
-patch_size = [64, 64, 64]
-n_worker = 1
-n_consistent_worms = 2
-max_ninstance = 50
+n_worker = 10

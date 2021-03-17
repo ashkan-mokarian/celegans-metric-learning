@@ -106,6 +106,7 @@ def main(args):
     test_loader = WormsDatasetOverSeghypCenters(
         sett.PATH.WORMS_DATASET,
         patch_size=sett.DATA.PATCH_SIZE,
+        output_size=sett.DATA.OUTPUT_SIZE,
         use_coord=sett.DATA.USE_COORD,
         normalize=sett.DATA.NORMALIZE)
     # test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, num_workers=1)
@@ -116,6 +117,7 @@ def main(args):
         cluster_save_file = os.path.join('/', model_path, model_name + '.cluster.joblib')
 
         model = PixelwiseModel(sett.MODEL.MODEL_NAME, sett.MODEL.MODEL_PARAMS,
+                               padding=sett.MODEL.PADDING,
                                load_model_path=model_pth)
         logger.info(f'Start Clustering. n_cluster=[{sett.TRAIN.N_CLUSTER}]')
         save_embedding_image_file_path = os.path.join(experiment_root, 'output', 'plots',

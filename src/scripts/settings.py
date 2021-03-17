@@ -99,6 +99,7 @@ class Model(BaseSettings):
         self.INIT_MODEL_PATH = None
         self.INIT_MODEL_BEST = False
         self.INIT_MODEL_LAST = False
+        self.PADDING = False
 
 
 class Train(BaseSettings):
@@ -133,6 +134,7 @@ class Data(BaseSettings):
     def __init__(self):
         self.N_WORKER = None
         self.PATCH_SIZE = None
+        self.OUTPUT_SIZE = None
         self.N_CONSISTENT_WORMS = None
         self.USE_LEFTOUT_LABELS = None
         self.USE_COORD = None
