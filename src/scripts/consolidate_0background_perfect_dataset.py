@@ -1,6 +1,8 @@
-"""Creates prepared hdf data from raw worms dataset
+"""Similar to consolidate_worms_dataset.py, creates the hdf dataset. This one creates so called perfect datasets.
 
-Check end of files for more information about datasets created
+I have two ideas for this. One is to keep the original size, collect intersection of all labeled data in the dataset,
+and keep only the labels that are shared on all 30 worms. only keep raw values of pixels belonging to this
+perfect_valid_list, 0 out everywhere.
 """
 import h5py
 import os
@@ -61,12 +63,13 @@ def main(config):
             ]
         )
 
-    logger.info('Starting consolidate_worms_dataset with following config:')
+    logger.info('Starting consolidate_smaller_perfect_dataset with following config:')
     logger.info('\n' + pprint.pformat(config))
 
     # For every worm, read and compute only necessary data and store in one .hdf file, replace all worm with their
     # unique id from worm_names.txt. Also replace unique labeling of nuclei from universe.txt only for gt data (to
     # get consistent label numbers across all worms, this way just checking if label_i==label_j gives tp).
+
     if config['data']['aligned_worms']:
         raw_fn = 'imagesAsMhdRawAligned/{}.mhd'
         label_fn = 'groundTruthInstanceSeg/{}.ano.curated.aligned.tiff'
@@ -79,6 +82,26 @@ def main(config):
 
     worms = lib.data.worms.Worms(config['path']['worm_names'])
     ulabels = lib.data.labels.Labels(config['path']['universe_labels'])
+
+    # for perfect_dataset we need the intersection of all valid label names on all the dataset
+    perfect_dataset_valid_labelnames = ulabels._labels
+    for n in range(len(worms._worm_names)):
+        wid = n+1
+        wname = worms.uid_to_name(wid)
+        labelmetadata_f = os.path.join(
+            config['path']['raw_worms_root'],
+            label_metadata_fn.format(wname)
+            )
+        valid_label_list = []
+        with open(labelmetadata_f) as f:
+            for line in f:
+                parts = line.split(' ')
+                seghyp_label = int(parts[0])
+                nuclei_name = parts[1].strip().upper()
+                if ulabels.is_valid_label(nuclei_name):
+                    valid_label_list.append(nuclei_name)
+        perfect_dataset_valid_labelnames = perfect_dataset_valid_labelnames.intersection(set(valid_label_list))
+    logger.info(f'perfect_dataset_valid_label:[len={len(perfect_dataset_valid_labelnames)}]')
 
     for n in range(len(worms._worm_names)):
         wid = n+1  # Start from 1, to be consistent with Lisa s code.
@@ -111,11 +134,13 @@ def main(config):
         # get nuclei segmentation hypothesis mask, here labels don't have necessarily
         # any meaning but they correspond with label names from labelmetadata_f
         nuclei_seghyp = to_array(label_f).astype(np.uint16)
-        logger.debug(f'max_label_seghyp:[{np.max(nuclei_seghyp)}]')
+        logger.debug(f'max_label_seghyp:[{np.max(nuclei_seghyp)}] - len_unique_label_seghyp:[{len(np.unique(nuclei_seghyp))}]')
 
         # labeling the segmentation hypothesis with unique universe label ids, results in approx 330 labels. Read
         # corresponding .ano.curated.aligned.txt file, numbers correspond to labels, names must be checked for validity
         gt_nuclei_labels = np.zeros_like(nuclei_seghyp)
+        zerobackground_raw = np.zeros_like(raw)
+        zerobackground_nuclei_seghyp = np.zeros_like(nuclei_seghyp)
 
         valid_label_list = []
         with open(labelmetadata_f) as f:
@@ -123,13 +148,16 @@ def main(config):
                 parts = line.split(' ')
                 raw_label = int(parts[0])
                 nuclei_name = parts[1].strip().upper()
-                if not ulabels.is_valid_label(nuclei_name):
+                if nuclei_name not in perfect_dataset_valid_labelnames:
                     continue
                 nuclei_uid = ulabels.label_to_uid(nuclei_name)
                 valid_label_list.append(nuclei_uid)
+                zerobackground_raw[nuclei_seghyp==raw_label] = raw[nuclei_seghyp==raw_label]
+                zerobackground_nuclei_seghyp[nuclei_seghyp==raw_label] = nuclei_seghyp[nuclei_seghyp==raw_label]
                 gt_nuclei_labels[nuclei_seghyp==raw_label] = nuclei_uid
 
-        logger.debug(f'n_labels in universe:[{len(valid_label_list)}]')
+        logger.debug(f'n valid labels:[{len(valid_label_list)}], n gt_seghyp unique labels:['
+                     f'{len(np.unique(zerobackground_nuclei_seghyp))}], n gt_label unique labels:[{len(np.unique(gt_nuclei_labels))}]')
 
 
         # TODO: find a workaround
@@ -144,14 +172,14 @@ def main(config):
 
             f.create_dataset(
                 'raw',  # raw input, without any normalization etc. [140x140x1166] uint8 values
-                data=raw,
+                data=zerobackground_raw,
                 compression='gzip'
                 )
             f.create_dataset(
                 'gt_seghyp',  # [140x140x1166] uint16, instance segmentation of nuclei,
                 # label numbers without any meaning, they just correspond with label names in
                 # *.ano.curated.aligned.txt
-                data=nuclei_seghyp,
+                data=zerobackground_nuclei_seghyp,
                 compression='gzip'
                 )
             f.create_dataset(

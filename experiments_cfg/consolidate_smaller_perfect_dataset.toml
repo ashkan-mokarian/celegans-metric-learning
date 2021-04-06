@@ -1,0 +1,14 @@
+[general]
+debug = true  # runs with loggind.level = 10, and possibly other debugging results
+overwrite = true
+zsize = 800  # visually, for aligned worms, the 800 lower pixels of them do not have many unlabeled data
+
+[path]
+# path to raw worms dataset 30WormImagesGroundTruthSeg
+raw_worms_root = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg'
+# used for consolidate_pm_dataset.py, path to created output file
+cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/cpm_dataset.pkl'
+# used for consolidate_worms_dataset, path to created hdf datasets
+worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/smaller_perfect_dataset'
+universe_labels = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg/universe.txt'
+worm_names = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/raw/30WormsImagesGroundTruthSeg/worm_names.txt'

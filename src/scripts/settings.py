@@ -67,8 +67,6 @@ class DefaultPath(BaseSettings):
         self.DATA = get_abs_join_path(self.BASE, 'data')
         self.DATA_INTERIM = get_abs_join_path(self.DATA, 'interim')
         proc_data = get_abs_join_path(self.BASE, 'data', 'processed')
-        self.CPM_DATASET = get_abs_join_path(proc_data, 'cpm_dataset.pkl')
-        self.WORMS_DATASET = get_abs_join_path(proc_data, 'worms_dataset')
         self.EXPERIMENTS = get_abs_join_path(self.BASE, 'experiments')
         self.EXPERIMENTS_CFG = get_abs_join_path(self.BASE, 'experiments_cfg')
         self.WORM_NAMES = get_abs_join_path(self.DATA, 'raw', 'worm_names.txt')
