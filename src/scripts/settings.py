@@ -77,12 +77,10 @@ class Path(BaseSettings):
     def __init__(self):
         self.EXPERIMENT_ROOT = None
         self.WORMS_DATASET = None
-        self.CPM_DATASET = None
 
 
 class General(BaseSettings):
     def __init__(self):
-        self.LOGGING = 20
         self.OVERWRITE = False
         self.DEBUG = False
         self.SEED = None
@@ -97,7 +95,6 @@ class Model(BaseSettings):
         self.INIT_MODEL_PATH = None
         self.INIT_MODEL_BEST = False
         self.INIT_MODEL_LAST = False
-        self.PADDING = False
 
 
 class Train(BaseSettings):
@@ -111,33 +108,48 @@ class Train(BaseSettings):
         self.WEIGHT_DECAY = None
         self.LR_DROP_FACTOR = None
         self.LR_DROP_PATIENCE = None
-        self.AUGMENTATION = Augmentation()
 
 
-class Augmentation(BaseSettings):
+class CommonTransforms(BaseSettings):
     def __init__(self):
-        self.ELASTIC = Elastic()
+        self.RESCALEINTENSITY01 = None
 
 
-class Elastic(BaseSettings):
+class TrainTransforms(BaseSettings):
     def __init__(self):
-        self.CONTROL_POINT_SPACING = None
-        self.JITTER_SIGMA = None
-        self.ROTATION_INTERVAL = None
-        self.SUBSAMPLE = None
-        self.P = None
+        self.RANDOM_ELASTIC = RandomElastic()
+        self.RANDOM_FLIP = 0
+        self.RANDOM_AFFINE = RandomAffine()
+
+
+class RandomAffine(BaseSettings):
+    def __init__(self):
+        self.SCALE = None
+        self.TRANSLATION = None
+        self.DEGREE = None
+        self.P = 0
+
+
+class RandomElastic(BaseSettings):
+    def __init__(self):
+        self.NUM_CONTROL_POINTS = None
+        self.MAX_DISPLACEMENT = None
+        self.P = 0
 
 
 class Data(BaseSettings):
     def __init__(self):
         self.N_WORKER = None
-        self.PATCH_SIZE = None
+        self.INPUT_SIZE = None
         self.OUTPUT_SIZE = None
         self.N_CONSISTENT_WORMS = None
-        self.USE_LEFTOUT_LABELS = None
         self.USE_COORD = None
-        self.NORMALIZE = None
         self.MAX_NINSTANCE = None
+        self.MIN_LABEL_VOLUME = None
+        self.COMMON_TRANSFORMS = CommonTransforms()
+        self.TRAIN_TRANSFORMS = TrainTransforms()
+        self.CPM_DATASET = None
+        self.SAMPLES_PER_VOLUME_FOR_TRAINING = None
 
 
 class Settings(BaseSettings):

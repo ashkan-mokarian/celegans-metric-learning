@@ -1,35 +1,46 @@
 name = 'default'
 
 [general]
-# error   40
-# warning 30
-# info    20
-# debug   10
-logging = 10
 debug = true
 #overwrite = true
 seed = 1234
 
 [path]
 #experiment_root = NONE
-#cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/cpm_dataset.pkl'
-#worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset'
+worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/worms_dataset'
 
 [model]
 model_name = 'unet'
 model_params = [4, 8, 4, 6]
 init_model_last = false
-padding=true
 
 [data]
 n_worker = 10
-patch_size = [64, 64, 64]
-output_size = [64, 64, 64]
+input_size = [64, 64, 64]
+output_size = [54, 54, 54]
 n_consistent_worms = 2  # only implemented for 1 and 2
-use_leftout_labels = true  # if true, retains labels in patches that are leftout in the corresponding patch cpm data
 use_coord = true
-normalize = true
 max_ninstance = 110
+min_label_volume = 10
+cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/cpm_dataset.pkl'
+samples_per_volume_for_training = 3
+
+[data.common_transforms]
+rescaleintensity01 = true
+
+[data.train_transforms]
+random_flip = 0
+
+[data.train_transforms.random_affine]
+scale = 0.2
+translation = 10
+degree = 10
+p = 0
+
+[data.train_transforms.random_elastic]
+num_control_points = [6, 6, 20]
+max_displacement = [15, 15, 15]
+p = 0.5
 
 [train]
 n_cluster = 558
@@ -41,11 +52,4 @@ learning_rate = 0.0001
 weight_decay = 0
 lr_drop_factor = 0.1
 lr_drop_patience = 20
-
-[train.augmentation.elastic]
-control_point_spacing = [10, 10, 10]
-jitter_sigma = [1, 1, 1]
-rotation_interval = [-5, 5]
-subsample = 1
-p = 0.8
 

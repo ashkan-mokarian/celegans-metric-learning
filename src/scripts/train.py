@@ -59,8 +59,6 @@ def get_settings(args):
         sett.PATH.EXPERIMENT_ROOT = DEFAULT_PATH.EXPERIMENTS
     if not sett.PATH.WORMS_DATASET:
         sett.PATH.WORMS_DATASET = DEFAULT_PATH.WORMS_DATASET
-    if not sett.PATH.CPM_DATASET:
-        sett.PATH.CPM_DATASET = DEFAULT_PATH.CPM_DATASET
 
     return sett
 

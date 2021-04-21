@@ -26,5 +26,5 @@ def neuroglancer_addlayer(txn, name, data, volume_type, offset=[0, 0, 0]):
                     coordinate_arrays=[
                     None, None, None
                 ]),
-            voxel_offset=(0, 0, 0)
+            voxel_offset=offset
     ))

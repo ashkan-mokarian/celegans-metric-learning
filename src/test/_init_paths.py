@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import os.path as osp
 import sys
 
@@ -15,3 +16,4 @@ this_dir = osp.dirname(__file__)
 
 lib_path = osp.join(this_dir, '..', 'lib')
 add_path(lib_path)
+os.environ['OMP_NUM_THREADS'] = '1'
