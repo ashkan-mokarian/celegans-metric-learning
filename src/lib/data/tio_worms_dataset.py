@@ -229,7 +229,7 @@ class TrainTioWormsDataset(IterableDataset):
                 selected_rows = set(unique_labels)
                 # dont select those labels that are very small
                 num_pixel_per_label = torch.stack([seghyp.sum([1,2,3]) for seghyp in seghyps]).sum([0])
-                small_labels_to_remove = (num_pixel_per_label<self.min_label_volume).nonzero().squeeze().tolist()
+                small_labels_to_remove = torch.nonzero(num_pixel_per_label<self.min_label_volume).squeeze().tolist()
                 if isinstance(small_labels_to_remove, int):
                     small_labels_to_remove = [small_labels_to_remove]
                 selected_rows -= set(small_labels_to_remove)
@@ -244,7 +244,7 @@ class TrainTioWormsDataset(IterableDataset):
                 # now in the end, just choose the selected_rows of seghyp and valid_push_force
 
                 # in the end, select selected rows, and make sure they are torch.tensors to be able to use pin_memory
-                valid_discloss_pushforce = valid_discloss_pushforce[selected_rows, selected_rows]
+                valid_discloss_pushforce = valid_discloss_pushforce[np.ix_(selected_rows, selected_rows)]
                 sample['raw'] = torch.cat(
                     [patch['raw'][tio.DATA] for patch in patches],
                     dim=0
@@ -269,134 +269,26 @@ class TrainTioWormsDataset(IterableDataset):
                 #         raws[i] = np.vstack([raw, xyz_coords])
 
 
-# TODO: This looks super STUPID. but for now
-class WormsDatasetOverSeghypCenters:
+class TestTioWormsDataset(IterableDataset):
+    '''Just loads the data from hdf files and makes sure that the same transformations are applied to input as in
+    train except for augmentations. they are whole images and no cropping is done (can't be put directly as input to
+    the network.)
+    '''
     def __init__(self,
-                 worms_dataset_root,
-                 patch_size,
-                 output_size,
-                 use_coord,
-                 normalize):
-        # super(WormsDatasetOverSeghypCenters, self).__init__()
-        self.worms_data = glob.glob(os.path.join(worms_dataset_root, "*.hdf"))
-        self.patch_size = patch_size
-        self.output_size = output_size
-        self.use_coord = use_coord
-        self.normalize = normalize
-
-    def __len__(self):
-        return len(self.worms_data)
-
-    def __getitem__(self, idx):
-        return OneWormDatasetOverSeghypCenters(self.worms_data[idx], patch_size=self.patch_size,
-                                               output_size=self.output_size,
-                                               use_coord=self.use_coord, normalize=self.normalize)
-
-
-class OneWormDatasetOverSeghypCenters(Dataset):
-    def __init__(self,
-                 worm_data,
-                 patch_size,
-                 output_size,
-                 use_coord,
-                 normalize):
-        super(OneWormDatasetOverSeghypCenters, self).__init__()
-        self.worm_data = worm_data
-        self.patch_size = np.array(patch_size)
-        self.output_size = np.array(output_size)
-        self.use_coord = use_coord
-        self.normalize = normalize
-        with h5py.File(self.worm_data, 'r') as f:
-            self.raw = f['volumes/raw'][()].astype('float')
-            self.seghyp = f['volumes/nuclei_seghyp'][()].astype('int')
-            self.con_seghyp = f['matrix/con_seghyp'][()]
-            self.gt_label = f['volumes/gt_nuclei_labels'][()].astype('int')
-        self.full_size = self.raw.shape
-
-    def __len__(self):
-        return self.con_seghyp.shape[0]-1  # first one is background label 0 with con [0, 0, 0]
-
-    def __getitem__(self, tmp_idx):
-        idx = tmp_idx + 1
-        con_idx = np.round(self.con_seghyp[idx]).astype(dtype=np.int)
-        if any(con_idx<-10000) or any(con_idx>10000):
-            # TODO: sometimes for worm18 con_idx has very large negative number, overflow
-            logger.info(f'Skipped loading con-seghyp with index:[{idx}], worm_name:[{self.worm_data}]')
-            return {'mask': torch.from_numpy(np.array([-1]))}
-
-        # other_corner_extra = con_idx + self.patch_size//2 - self.full_size
-        # other_corner_extra[other_corner_extra<0] = 0
-        # corner = con_idx - self.patch_size//2 - other_corner_extra
-        # corner[corner < 0] = 0
-        # patch = (slice(corner[0], corner[0]+self.patch_size[0]),
-        #          slice(corner[1], corner[1]+self.patch_size[1]),
-        #          slice(corner[2], corner[2]+self.patch_size[2]))
-
-        raw, corner = extract_0padded_patch(self.patch_size, con_idx, self.raw)
-        # raw = self.raw[patch]
-        raw = np.expand_dims(raw, axis=0)  # add channel dim
-        if self.use_coord:
-            xyz_coords = np.meshgrid(np.arange(start=corner[0], stop=corner[0] + self.patch_size[0]),
-                                     np.arange(start=corner[1], stop=corner[1] + self.patch_size[1]),
-                                     np.arange(start=corner[2], stop=corner[2] + self.patch_size[2]))
-            xyz_coords = [np.expand_dims(c, axis=0) for c in xyz_coords]
-            xyz_coords = np.vstack(xyz_coords)
-            raw = np.vstack([raw, xyz_coords])
-        if self.normalize:
-            raw[0] /= 255.0
-            if self.use_coord:
-                raw[1] = (raw[1] - 70.0) / 70.0
-                raw[2] = (raw[2] - 70.0) / 70.0
-                raw[3] = (raw[3] - 583.0) / 583.0
-
-        masktmp, _ = extract_0padded_patch(self.output_size, con_idx, self.seghyp)
-        # masktmp = self.seghyp[patch]
-        mask = np.zeros_like(masktmp)
-        mask[masktmp==idx] = 1
-        gt_label,_ = extract_0padded_patch(self.output_size, con_idx, self.gt_label)
-        # gt_label = self.gt_label[patch]
-        gt_label_ids = gt_label[mask==1]
-        if len(gt_label_ids)==0:
-            # TODO: clean the dataset for worm18 to not have this
-            logger.info(f'Skipped loading con-seghyp with index:[{idx}], worm_name:[{self.worm_data}]')
-            return {'mask': torch.from_numpy(np.array([-1]))}
-        gt_label_id = int(gt_label_ids[0])
-        assert np.all(gt_label_ids == gt_label_id)
-        gt_label_id = np.array(gt_label_id)
-        sample = {'patch_reference_corner': corner,
-                  'raw': raw,
-                  'mask': mask,
-                  'gt_label_id': gt_label_id}
-        sample = {k: torch.from_numpy(v) for k, v in sample.items()}
-        return sample
-
-
-def extract_0padded_patch(shape, con, arr):
-    con = np.array(con)
-    shape = np.array(shape)
-    assert len(con) == 3
-    corner = con - shape//2
-    valid_corner = np.array([corner[i] if corner[i]>=0 else 0 for i in range(len(corner))])
-    other_corner = corner + shape
-    valid_other_corner = np.array(list(other_corner[i] if other_corner[i]<=ll else ll for i, ll in enumerate([140,
-                                                                                                              140,
-                                                                                                              1166])))
-
-    relative_patch = (
-        slice(valid_corner[0]-corner[0], shape[0] - other_corner[0]+valid_other_corner[0]),
-        slice(valid_corner[1] - corner[1], shape[1] - other_corner[1] + valid_other_corner[1]),
-        slice(valid_corner[2] - corner[2], shape[2] - other_corner[2] + valid_other_corner[2]),
-    )
-
-    sampled_patch = (
-        slice(valid_corner[0], valid_other_corner[0]),
-        slice(valid_corner[1], valid_other_corner[1]),
-        slice(valid_corner[2], valid_other_corner[2]),
-    )
-
-    if sampled_patch[0].start > 1000:
-        print('jj')
-    raw = np.zeros(shape)
-    raw[relative_patch] = arr[sampled_patch]
-
-    return raw, corner
+                 dataset_root,
+                 sett: Settings,
+                 transforms=None,
+                 debug=False):
+        super(TrainTioWormsDataset).__init__()
+        # list hdf files, either from files.txt or by listing all hdf files in a directory, or by a python list of files
+        if os.path.isfile(dataset_root) and dataset_root.endswith('.txt'):
+            with open(dataset_root, 'r') as f:
+                self.hdf_fnlist = [fn for fn in f]
+        elif isinstance(dataset_root, list):
+            self.hdf_fnlist = []
+            for fn in dataset_root:
+                assert os.path.isfile(fn), f'cannot find file: {fn}'
+                self.hdf_fnlist.append(fn)
+        else:
+            self.hdf_fnlist = glob.glob(os.path.join(dataset_root, "*.hdf"))
+        logger.debug(f'Test Dataset hdf list:{self.hdf_fnlist}')

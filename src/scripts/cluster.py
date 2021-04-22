@@ -10,7 +10,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 import _init_paths
 
-# from data.siamese_worms_dataset import SiameseWormsDataset
 from lib.data.worms_dataset import WormsDatasetOverSeghypCenters
 from lib.models.pixelwise_model import PixelwiseModel
 from settings import Settings, DefaultPath
@@ -51,7 +50,7 @@ def main(args):
     logging.basicConfig(
         format='%(name)s:%(levelname)s [%(asctime)s]: %(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
-        level=sett.GENERAL.LOGGING,
+        level=10 if sett.GENERAL.DEBUG else 20,
         handlers=[
             logging.FileHandler(os.path.join(experiment_root, 'cluster.log')),
             logging.StreamHandler()

@@ -17,7 +17,7 @@ import matplotlib.pylab as plt
 import plotly.offline as plotlyoff
 import plotly.graph_objs as plotlygo
 
-from lib.modules.unet import UNet
+from funlib.learn.torch.models import UNet
 
 from lib.modules.discriminative_loss import DiscriminativeLoss
 # from lib.modules.discriminative_loss_withforloop import DiscriminativeLoss
@@ -29,16 +29,10 @@ logger = logging.getLogger(__name__)
 class PixelwiseModel:
     """Defines training, evaluation, ... for a **pixel-wise model**"""
     def __init__(self,
-                 backbone_model_name,
-                 backbone_model_params,
-                 padding,
+                 sett,
                  load_model_path=None):
 
-        if backbone_model_name == 'unet':
-            unet = UNet(*backbone_model_params, padding=padding)
-        else:
-            raise NotImplementedError()
-        self.model = unet
+        self.model = self._define_model(sett)
         self.best_loss = np.inf
         self.step = 0
         self.load_model_path = load_model_path
@@ -46,6 +40,9 @@ class PixelwiseModel:
             assert os.path.exists(load_model_path), f'load_model_path:[{load_model_path}], does not exist.'
             self.step, self.best_loss = self.load_model(load_model_path)
         self.model.cuda()
+
+    def _define_model(self, sett):
+        raise NotImplementedError()
 
     def save_model(self, step, optimizer, lr_scheduler, loss, filename):
         torch.save({
@@ -70,18 +67,10 @@ class PixelwiseModel:
         return step, loss
 
     def print_model_summary(self, sample_input):
-        # TODO: summary only prints to stdout, does not return str for logger
-        input_size = sample_input.size()[1:]
-        print('Backbone Summary:')
-        torchsummary.summary(self.model, input_size)
-        # Do not need this, since torchsummary does not count weight sharing -> wrong trainable param information, etc.
-        # print('Siamese  Summary:')
-        # torchsummary.summary(self.model, [input_size, input_size])
+        raise NotImplementedError
 
-    @staticmethod
-    def _define_criterion():
-        # TODO: currently only loss with default values
-        return DiscriminativeLoss()
+    def _define_criterion(self):
+        raise NotImplementedError()
 
     def _define_optimizer(self, learning_rate, weight_decay, lr_drop_factor, lr_drop_patience, load_state=True):
         parameters = self.model.parameters()
@@ -101,22 +90,7 @@ class PixelwiseModel:
         return optimizer, lr_scheduler
 
     def _train_one_iteration(self, input, criterion, optimizer):
-        raw = input['raw'].float().cuda()
-        label = input['label'].float().cuda()
-
-        optimizer.zero_grad()
-        out = self.model(raw)
-
-        loss, l_var, l_dist, l_reg = criterion(out, label)
-        assert not torch.isnan(loss), 'Why is loss NaN sometimes?'
-        if loss.item() > 100:
-            logger.debug('SKIPPING TRAINING - NOT TRAINING FOR THIS STEP BECAUSE LOSS TOO LARGE')
-            return loss, l_var, l_dist, l_reg
-
-        loss.backward()
-        optimizer.step()
-
-        return loss, l_var, l_dist, l_reg
+        raise NotImplementedError()
 
     def fit(self, train_loader, n_step, learning_rate, weight_decay, lr_drop_factor, lr_drop_patience,
             model_ckpt_every_n_step, model_save_path, running_loss_interval, burn_in_step, tb_writer=None):
@@ -127,24 +101,18 @@ class PixelwiseModel:
 
         train_iter = iter(train_loader)
 
-        if tb_writer:
-            tmp_input = next(train_iter)
-            tb_writer.add_graph(self.model, tmp_input['raw'].float().cuda())
-
         self.model.train()
 
         running_loss_timer = time.time()
         running_loss = np.zeros(running_loss_interval)
         for step in range(self.step+1, n_step+1):
             inputs = next(train_iter)
-            loss, l_var, l_dist, l_reg = self._train_one_iteration(inputs, criterion, optimizer)
+            loss, loss_dict = self._train_one_iteration(inputs, criterion, optimizer)
 
             running_loss[:-1] = running_loss[1:]; running_loss[-1] = loss.item()
 
-            tb_writer.add_scalar('Loss/train', loss.item(), step)
-            tb_writer.add_scalar('Loss/train_lvar', l_var.item(), step)
-            tb_writer.add_scalar('Loss/train_ldist', l_dist.item(), step)
-            tb_writer.add_scalar('Loss/train_lreg', l_reg.item(), step)
+            for k, v in loss_dict.items():
+                tb_writer.add_scalar(k, v, step)
             tb_writer.add_scalar('lr', optimizer.param_groups[0]['lr'], step)
 
             if step % model_ckpt_every_n_step == 0:

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import time
 import sys
 import random
 import numpy as np
@@ -12,8 +13,8 @@ import _init_paths
 
 from settings import Settings, DefaultPath
 from lib.utils.general import generate_run_id
-from lib.data.worms_dataset import WormsDataset
-from lib.models.pixelwise_model import PixelwiseModel
+from lib.data.tio_worms_dataset import TrainTioWormsDataset
+from lib.models.unet_validpushforcediscloss import UnetValidPushForceDiscLoss
 
 from lib.utils.gpu_profile import trace_calls, set_gpu_profile_fn
 
@@ -63,7 +64,12 @@ def get_settings(args):
     return sett
 
 
+def init_fn(worker_id):
+    random.seed(worker_id+time.time())
+
+
 def main(args):
+    print(os.environ.keys())
     sett = get_settings(args)
 
     # experiment root
@@ -92,7 +98,7 @@ def main(args):
     logging.basicConfig(
         format='%(name)s:%(levelname)s [%(asctime)s]: %(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
-        level=sett.GENERAL.LOGGING,
+        level=10,
         handlers=[
             logging.FileHandler(os.path.join(experiment_root, 'train.log')),
             logging.StreamHandler()
@@ -116,33 +122,27 @@ def main(args):
     logger.info("Setting:" + str(sett))
     sett.get_toml_dict(os.path.join(experiment_root, 'train.toml'))
 
-    train_dataset = WormsDataset(
-        sett.PATH.WORMS_DATASET,
-        sett.PATH.CPM_DATASET,
-        patch_size=sett.DATA.PATCH_SIZE,
-        output_size=sett.DATA.OUTPUT_SIZE,
-        n_consistent_worms=sett.DATA.N_CONSISTENT_WORMS,
-        use_leftout_labels=sett.DATA.USE_LEFTOUT_LABELS,
-        use_coord=sett.DATA.USE_COORD,
-        normalize=sett.DATA.NORMALIZE,
-        augmentation=sett.TRAIN.AUGMENTATION,
+    train_dataset = TrainTioWormsDataset(
+        dataset_root=sett.PATH.WORMS_DATASET,
+        sett=sett,
         transforms=None,
-        train=True,
-        debug=sett.GENERAL.DEBUG,
-        max_ninstance=sett.DATA.MAX_NINSTANCE)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, shuffle=False,
-                                               num_workers=sett.DATA.N_WORKER)
+        debug=False)
 
-    model = PixelwiseModel(sett.MODEL.MODEL_NAME,
-                           sett.MODEL.MODEL_PARAMS,
-                           padding=sett.MODEL.PADDING,
-                           load_model_path=load_model_path)
-    mock_input = next(iter(train_loader))
-    model.print_model_summary(mock_input['raw'])
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        num_workers=sett.DATA.N_WORKER,
+        worker_init_fn=init_fn,
+        batch_size=None,
+        pin_memory=True,
+        persistent_workers=False)  # TODO: for torch 1.7 throws error with pin memory and persistent worker. update  and set this to tru
 
     tb_logs_dir = os.path.join(experiment_root, 'tblogs')
     os.makedirs(tb_logs_dir, exist_ok=True)
     tb_writer = SummaryWriter(log_dir=tb_logs_dir)
+
+    model = UnetValidPushForceDiscLoss(sett=sett)
+    mock_input = next(iter(train_loader))
+    model.print_model_summary(mock_input, tb_writer)
 
     model_save_path = os.path.join(experiment_root, 'ckpts')
     os.makedirs(model_save_path, exist_ok=True)

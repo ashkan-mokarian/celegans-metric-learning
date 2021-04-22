@@ -1,4 +1,4 @@
-name = '0backgroundperfectdataset_default'
+name = 'default'
 
 [general]
 debug = true
@@ -6,11 +6,11 @@ debug = true
 seed = 1234
 
 [path]
-#experiment_root = NONE
+experiment_root = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/experiments/0backgroundperfect'
 worms_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/0background_perfect_dataset'
 
 [model]
-model_name = 'unet_with_valid_pushforce_discloss'
+model_name = 'unet_validpushforcediscloss'
 init_model_last = false
 
 [model.model_params]
@@ -20,14 +20,14 @@ downsample_factors = [[2,2,2], [2,2,2], [2,2,2]]  # also defines the depth of th
 
 [data]
 n_worker = 10
-input_size = [64, 64, 64]
-output_size = [54, 54, 54]
+input_size = [132, 132, 132]
+output_size = [40, 40, 40]
 n_consistent_worms = 2  # only implemented for 1 and 2
 use_coord = false
-max_ninstance = 110
+max_ninstance = 80
 min_label_volume = 10
 cpm_dataset = '/home/ashkan/workspace/deployed/worms_nuclei_metric_learning-deployed/data/processed/0background_perfect_dataset/gtcpm100.pkl'
-samples_per_volume_for_training = 3
+samples_per_volume_for_training = 5
 
 [data.common_transforms]
 rescaleintensity01 = true
@@ -39,7 +39,7 @@ random_flip = 0
 scale = 0.2
 translation = 10
 degree = 10
-p = 0  # just setting this to 0 removes the augmentation
+p = 0
 
 [data.train_transforms.random_elastic]
 num_control_points = [6, 6, 20]
@@ -47,9 +47,9 @@ max_displacement = [15, 15, 15]
 p = 0.5
 
 [train]
-n_cluster = 559
-n_step = 100000
-model_ckpt_every_n_step = 20000
+n_cluster = 332
+n_step = 40000
+model_ckpt_every_n_step = 10000
 running_loss_interval = 1000
 burn_in_step = 15000
 learning_rate = 0.0001

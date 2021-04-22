@@ -13,11 +13,11 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-class DiscriminativeLoss(_Loss):
+class DiscriminativeLossValidPushForce(_Loss):
 
     def __init__(self, delta_var=0.5, delta_dist=1.5, norm=2, alpha=1.0,
                  beta=1.0, gamma=0.001, usegpu=True):
-        super(DiscriminativeLoss, self).__init__()
+        super(DiscriminativeLossValidPushForce, self).__init__()
         self.delta_var = float(delta_var)
         self.delta_dist = float(delta_dist)
         self.norm = norm
@@ -27,11 +27,11 @@ class DiscriminativeLoss(_Loss):
         self.usegpu = usegpu
         assert self.norm in [1, 2]
 
-    def forward(self, input, target):
-        target.detach_()
-        return self._discriminative_loss(input, target)
+    def forward(self, input, target, valid_pushforce_matrix):
+        # target.detach_()
+        return self._discriminative_loss(input, target, valid_pushforce_matrix)
 
-    def _discriminative_loss(self, input, target):
+    def _discriminative_loss(self, input, target, valid_pushforce_matrix):
         bs, n_features, xsize, ysize, zsize = input.size()
         n_clusters = target.size(1)
         # Since no typical batch meaning here, consider it as extra pixel wise embeddings. yes, spatial locality
@@ -42,7 +42,7 @@ class DiscriminativeLoss(_Loss):
 
         c_means = self._cluster_means(input, target)
         l_var = self._variance_term(input, target, c_means)
-        l_dist = self._distance_term(c_means)
+        l_dist = self._distance_term(c_means, valid_pushforce_matrix)
         l_reg = self._regularization_term(c_means)
         loss = self.alpha * l_var + self.beta * l_dist + self.gamma * l_reg
 
@@ -91,19 +91,20 @@ class DiscriminativeLoss(_Loss):
 
         return var_term
 
-    def _distance_term(self, c_means):
+    def _distance_term(self, c_means, valid_pushforce_matrix):
         n_features, n_clusters = c_means.size()
 
         # n_features, n_clusters, n_clusters
         means_a = c_means.unsqueeze(2).expand(n_features, n_clusters, n_clusters)
         means_b = means_a.permute(0, 2, 1)
         diff = means_a - means_b
+        valid_diff = torch.mul(diff, valid_pushforce_matrix)
 
         margin = 2 * self.delta_dist * (1.0 - torch.eye(n_clusters))
         margin = Variable(margin)
         if self.usegpu:
             margin = margin.cuda()
-        c_dist = torch.sum(torch.clamp(margin - torch.norm(diff, self.norm, 0), min=0) ** 2)
+        c_dist = torch.sum(torch.clamp(margin - torch.norm(valid_diff, self.norm, 0), min=0) ** 2)
         dist_term = c_dist / (2 * n_clusters * (n_clusters - 1))
 
         return dist_term

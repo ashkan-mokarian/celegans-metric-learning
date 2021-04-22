@@ -91,10 +91,17 @@ class General(BaseSettings):
 class Model(BaseSettings):
     def __init__(self):
         self.MODEL_NAME = None
-        self.MODEL_PARAMS = None
+        self.MODEL_PARAMS = ModelParams()
         self.INIT_MODEL_PATH = None
         self.INIT_MODEL_BEST = False
         self.INIT_MODEL_LAST = False
+
+class ModelParams(BaseSettings):
+    def __init__(self):
+        self.IN_CHANNELS = None
+        self.NUM_FMAPS = None
+        self.FMAP_INC_FACTOR = None
+        self.DOWNSAMPLE_FACTORS = None
 
 
 class Train(BaseSettings):
